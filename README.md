@@ -97,7 +97,9 @@ Comandos: `npm test` (testes do cálculo), `npm run typecheck`.
 
 ### Render (configurado em `render.yaml`)
 
-No painel do Render: **New → Blueprint**, escolha este repositório e confirme. Ele cria o servidor web e o banco PostgreSQL já ligados, gera o `JWT_SECRET` e usa HTTPS automaticamente.
+No painel do Render: **New → Blueprint**, escolha este repositório e confirme. Ele cria o servidor web, gera o `JWT_SECRET` e usa HTTPS automaticamente.
+
+O banco não é criado pelo Blueprint, porque o Render permite só um PostgreSQL grátis por conta. Quando o Render pedir o `DATABASE_URL`, cole a **Internal Database URL** de um banco que você já tem e acrescente `?schema=ponto` no final. As tabelas do ponto ficam num schema próprio, separadas das de outros sistemas no mesmo banco.
 
 - No build, `scripts/usar-postgres.mjs` troca o banco do Prisma de SQLite (usado no seu computador) para PostgreSQL. Você não precisa mexer no schema.
 - Na subida, `prisma db push` cria ou atualiza as tabelas.
@@ -105,7 +107,7 @@ No painel do Render: **New → Blueprint**, escolha este repositório e confirme
 
 Plano gratuito (configuração atual):
 - O servidor dorme depois de 15 min sem uso; o primeiro acesso depois disso leva cerca de 1 min.
-- O banco gratuito expira em 30 dias.
+- O banco gratuito do Render expira em 30 dias (vale para o banco compartilhado também).
 - As fotos das marcações se perdem a cada novo deploy (não há disco permanente).
 - **Reconhecimento facial desligado** (`FACIAL_ATIVO=false`): ele usa ~500 MB e o plano tem 512 MB no total. Quem tiver o facial marcado bate ponto com foto simples.
 
