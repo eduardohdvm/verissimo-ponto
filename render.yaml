@@ -1,10 +1,10 @@
 # Blueprint do Render: no painel, New > Blueprint e selecione este repositório.
 #
-# O banco não é criado aqui: o Render permite só um PostgreSQL grátis por conta.
-# Use um banco que você já tem, num schema separado, para as tabelas do ponto
-# não se misturarem com as de outro sistema. Na criação, o Render pede o
-# DATABASE_URL: cole a "Internal Database URL" do banco e acrescente ?schema=ponto
-#   ex.: postgresql://usuario:senha@dpg-xxxx-a/banco?schema=ponto
+# O banco fica no Neon (neon.tech, PostgreSQL grátis), não no Render: o Render
+# permite só um PostgreSQL grátis por conta. Na criação, o Render pede o
+# DATABASE_URL: cole a connection string do Neon com "Connection pooling" DESLIGADO
+# (o host não pode ter "-pooler") e sem o parâmetro channel_binding.
+#   ex.: postgresql://usuario:senha@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require
 #
 # Plano gratuito (teste): o servidor dorme após 15 min sem uso e as fotos das
 # marcações somem a cada novo deploy.

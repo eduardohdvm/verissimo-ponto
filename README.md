@@ -99,7 +99,9 @@ Comandos: `npm test` (testes do cálculo), `npm run typecheck`.
 
 No painel do Render: **New → Blueprint**, escolha este repositório e confirme. Ele cria o servidor web, gera o `JWT_SECRET` e usa HTTPS automaticamente.
 
-O banco não é criado pelo Blueprint, porque o Render permite só um PostgreSQL grátis por conta. Quando o Render pedir o `DATABASE_URL`, cole a **Internal Database URL** de um banco que você já tem e acrescente `?schema=ponto` no final. As tabelas do ponto ficam num schema próprio, separadas das de outros sistemas no mesmo banco.
+O banco fica no [Neon](https://neon.tech) (PostgreSQL grátis), porque o Render permite só um PostgreSQL grátis por conta. No Neon, crie um projeto e copie a connection string com **Connection pooling desligado** (o endereço não pode ter `-pooler`) e sem o trecho `&channel_binding=require`. Cole essa URL quando o Render pedir o `DATABASE_URL`.
+
+Se preferir usar um banco PostgreSQL que já tem outro sistema, acrescente `?schema=ponto` à URL: as tabelas do ponto ficam num schema próprio, separadas das demais.
 
 - No build, `scripts/usar-postgres.mjs` troca o banco do Prisma de SQLite (usado no seu computador) para PostgreSQL. Você não precisa mexer no schema.
 - Na subida, `prisma db push` cria ou atualiza as tabelas.
@@ -107,7 +109,7 @@ O banco não é criado pelo Blueprint, porque o Render permite só um PostgreSQL
 
 Plano gratuito (configuração atual):
 - O servidor dorme depois de 15 min sem uso; o primeiro acesso depois disso leva cerca de 1 min.
-- O banco gratuito do Render expira em 30 dias (vale para o banco compartilhado também).
+- O plano grátis do Neon tem 0,5 GB e "adormece" sem uso (o primeiro acesso leva alguns segundos a mais).
 - As fotos das marcações se perdem a cada novo deploy (não há disco permanente).
 - **Reconhecimento facial desligado** (`FACIAL_ATIVO=false`): ele usa ~500 MB e o plano tem 512 MB no total. Quem tiver o facial marcado bate ponto com foto simples.
 
