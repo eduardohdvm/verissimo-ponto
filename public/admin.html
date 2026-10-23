@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel · Sistema de Ponto</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="lateral" id="menu">
+      <div class="marca" id="marca"></div>
+      <a href="#painel">Painel</a>
+      <a href="#funcionarios">Funcionários</a>
+      <a href="#espelho">Espelho de ponto</a>
+      <a href="#ajustes">Solicitações</a>
+      <a href="#jornadas">Jornadas</a>
+      <a href="#locais">Locais e feriados</a>
+      <a href="#integracoes">Integrações (ERP)</a>
+      <div class="rodape"><div id="usuario"></div><a href="#" id="sair" style="padding:6px 0">Sair</a></div>
+    </nav>
+    <main class="principal" id="conteudo"></main>
+  </div>
+  <dialog id="modal"></dialog>
+  <script type="module" src="/admin.js"></script>
+</body>
+</html>

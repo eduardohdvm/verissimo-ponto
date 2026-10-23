@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sistema de Ponto</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg">
+  <meta name="theme-color" content="#1463d9">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="centro">
+    <div class="caixa stack">
+      <div class="marca" id="marca" style="justify-content:center;padding:0"></div>
+
+      <form id="form-login" class="card">
+        <h1>Entrar</h1>
+        <label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+        <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
+        <p id="erro-login" class="alerta oculto"></p>
+        <button class="primary" style="width:100%">Entrar</button>
+        <p class="muted small" style="text-align:center;margin-bottom:0">
+          Empresa nova? <a href="#" id="ir-cadastro">Comece o teste grátis</a>
+        </p>
+      </form>
+
+      <form id="form-cadastro" class="card oculto">
+        <h1>Cadastre sua empresa</h1>
+        <label>Razão social<input name="razaoSocial" required></label>
+        <label>CNPJ<input name="cnpj" inputmode="numeric" required></label>
+        <label>Seu nome<input name="nome" required></label>
+        <label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+        <label>Senha (mínimo 8 caracteres)<input name="senha" type="password" minlength="8" autocomplete="new-password" required></label>
+        <p id="erro-cadastro" class="alerta oculto"></p>
+        <button class="primary" style="width:100%">Criar conta</button>
+        <p class="muted small" style="text-align:center;margin-bottom:0"><a href="#" id="ir-login">Já tenho conta</a></p>
+      </form>
+    </div>
+  </main>
+
+  <script type="module">
+    import { api, token, LOGO } from "/app.js";
+
+    document.getElementById("marca").innerHTML = `${LOGO}<span>Sistema de Ponto</span>`;
+    const destino = (papel) => (location.href = papel === "FUNCIONARIO" ? "/ponto" : "/admin");
+
+    if (token.get()) api("GET", "/api/auth/eu").then((u) => destino(u.papel)).catch(() => token.limpar());
+
+    const login = document.getElementById("form-login");
+    const cadastro = document.getElementById("form-cadastro");
+    document.getElementById("ir-cadastro").onclick = (e) => { e.preventDefault(); login.classList.add("oculto"); cadastro.classList.remove("oculto"); };
+    document.getElementById("ir-login").onclick = (e) => { e.preventDefault(); cadastro.classList.add("oculto"); login.classList.remove("oculto"); };
+
+    function enviar(form, url, erroEl, depois) {
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const botao = form.querySelector("button");
+        botao.disabled = true;
+        erroEl.classList.add("oculto");
+        try {
+          const r = await api("POST", url, Object.fromEntries(new FormData(form)));
+          token.set(r.token);
+          depois(r);
+        } catch (err) {
+          erroEl.textContent = err.message;
+          erroEl.classList.remove("oculto");
+        } finally {
+          botao.disabled = false;
+        }
+      };
+    }
+    enviar(login, "/api/auth/login", document.getElementById("erro-login"), (r) => destino(r.papel));
+    enviar(cadastro, "/api/auth/cadastro", document.getElementById("erro-cadastro"), () => destino("ADMIN"));
+  </script>
+</body>
+</html>

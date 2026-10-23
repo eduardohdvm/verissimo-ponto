@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Bater ponto</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg">
+  <meta name="theme-color" content="#1463d9">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .ponto { max-width: 520px; margin: 0 auto; padding: 16px; }
+    .cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .relogio { text-align: center; }
+    .relogio .hora { font-size: 56px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.1; }
+    .camera { position: relative; aspect-ratio: 4 / 3; background: var(--surface-2); border-radius: 12px; overflow: hidden; display: grid; place-items: center; }
+    .camera video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .guia { position: absolute; inset: auto 0 0 0; padding: 14px 16px 16px; background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; text-align: center; font-size: 18px; font-weight: 600; }
+    .guia .barra { height: 4px; background: rgb(255 255 255 / 30%); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+    .guia .barra i { display: block; height: 100%; width: 0; background: #4cc58a; transition: width .3s; }
+    .status { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    #registrar { width: 100%; padding: 16px; font-size: 18px; border-radius: 12px; }
+    .abas { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; margin-bottom: 16px; }
+    .abas button { flex: 1; border: none; background: transparent; padding: 8px; }
+    .abas button.ativo { background: var(--surface); box-shadow: var(--shadow); font-weight: 600; }
+    .marcas { display: flex; gap: 8px; flex-wrap: wrap; }
+    .marcas .tag { font-size: 15px; padding: 4px 12px; }
+  </style>
+</head>
+<body>
+  <div class="ponto">
+    <div class="cab">
+      <div><strong id="nome">…</strong><div class="muted small" id="empresa"></div></div>
+      <button class="sm" id="sair">Sair</button>
+    </div>
+
+    <div class="abas">
+      <button data-aba="bater" class="ativo">Bater ponto</button>
+      <button data-aba="espelho">Meu espelho</button>
+      <button data-aba="ajuste">Pedir ajuste</button>
+    </div>
+
+    <section id="aba-bater" class="stack">
+      <div class="relogio"><div class="hora" id="hora">--:--</div><div class="muted" id="data"></div></div>
+      <div class="camera" id="camera"><span class="muted small">Câmera desligada</span>
+        <div class="guia oculto" id="guia"><span></span><div class="barra"><i></i></div></div></div>
+      <div class="status" id="status"></div>
+      <p id="msg" class="alerta oculto"></p>
+      <button class="primary" id="registrar" disabled>Registrar ponto</button>
+      <div class="card">
+        <h3>Marcações de hoje</h3>
+        <div class="marcas" id="marcas"><span class="muted">Nenhuma ainda</span></div>
+      </div>
+    </section>
+
+    <section id="aba-espelho" class="oculto stack">
+      <input type="month" id="mes">
+      <div id="espelho" class="card"></div>
+    </section>
+
+    <section id="aba-ajuste" class="oculto stack">
+      <form class="card" id="form-ajuste">
+        <h2>Pedir ajuste</h2>
+        <p class="muted small">Esqueceu de marcar ou precisa justificar uma ausência? Seu gestor vai analisar.</p>
+        <label>Tipo<select name="tipo"><option value="INCLUSAO">Esqueci de marcar</option><option value="ABONO">Justificar ausência (atestado etc.)</option></select></label>
+        <div class="grid2">
+          <label>Dia<input name="data" type="date" required></label>
+          <label id="campo-hora">Horário<input name="hora" type="time"></label>
+        </div>
+        <label>Motivo<input name="motivo" required></label>
+        <div class="acoes"><button class="primary">Enviar</button></div>
+      </form>
+      <div class="card"><h3>Minhas solicitações</h3><div id="minhas"></div></div>
+    </section>
+  </div>
+
+  <dialog id="comprovante"></dialog>
+  <canvas id="canvas" class="oculto"></canvas>
+  <script type="module" src="/ponto.js"></script>
+</body>
+</html>
