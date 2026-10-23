@@ -1,0 +1,41 @@
+# Blueprint do Render: no painel, New > Blueprint e selecione este repositório.
+# Cria o servidor web e o banco PostgreSQL já ligados um ao outro.
+#
+# Plano gratuito (teste): o servidor dorme após 15 min sem uso, o banco expira
+# em 30 dias e as fotos das marcações somem a cada novo deploy.
+# Para clientes reais: plan "standard" no serviço (2 GB, necessário para o facial),
+# plan "basic-256mb" no banco e um disco permanente para as fotos (bloco "disk" abaixo).
+services:
+  - type: web
+    name: verissimo-ponto
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm ci && npm run render:build
+    startCommand: npm run render:start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: verissimo-ponto-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # O reconhecimento facial usa ~500 MB e o plano grátis tem 512 MB no total.
+      # Para ligar: plan "standard" (2 GB) e FACIAL_ATIVO = "true".
+      - key: FACIAL_ATIVO
+        value: "false"
+    # disk:
+    #   name: fotos
+    #   mountPath: /var/data
+    #   sizeGB: 1
+    # (e adicione a variável UPLOADS_DIR=/var/data/uploads)
+
+databases:
+  - name: verissimo-ponto-db
+    plan: free
+    region: virginia
+    databaseName: verissimo_ponto
+    user: verissimo_ponto

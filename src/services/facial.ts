@@ -17,7 +17,8 @@ import { analisarRosto, decodificarJpeg, distanciaRostos, type RostoAnalisado } 
 
 export type Passo = "FRENTE" | "ESQUERDA" | "DIREITA";
 
-export const PASTA_UPLOADS = path.resolve("uploads");
+// Em produção, aponte UPLOADS_DIR para um disco permanente (no Render, um Persistent Disk)
+export const PASTA_UPLOADS = path.resolve(process.env.UPLOADS_DIR ?? "uploads");
 
 const VALIDADE_DESAFIO_MS = 2 * 60_000;
 // Folga em relação ao navegador (que exige 0,12 de frente e 0,28 virado),

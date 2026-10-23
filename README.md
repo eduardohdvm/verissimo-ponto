@@ -95,6 +95,30 @@ Comandos: `npm test` (testes do cálculo), `npm run typecheck`.
 
 ## Produção
 
-1. Em `prisma/schema.prisma`, troque `provider = "sqlite"` por `"postgresql"` e aponte `DATABASE_URL` para o Postgres.
-2. Defina um `JWT_SECRET` longo e aleatório.
-3. Sirva com HTTPS (obrigatório para câmera e GPS).
+### Render (configurado em `render.yaml`)
+
+No painel do Render: **New → Blueprint**, escolha este repositório e confirme. Ele cria o servidor web e o banco PostgreSQL já ligados, gera o `JWT_SECRET` e usa HTTPS automaticamente.
+
+- No build, `scripts/usar-postgres.mjs` troca o banco do Prisma de SQLite (usado no seu computador) para PostgreSQL. Você não precisa mexer no schema.
+- Na subida, `prisma db push` cria ou atualiza as tabelas.
+- O banco começa vazio. Entre pelo link do serviço e use **Comece o teste grátis** para criar a primeira empresa.
+
+Plano gratuito (configuração atual):
+- O servidor dorme depois de 15 min sem uso; o primeiro acesso depois disso leva cerca de 1 min.
+- O banco gratuito expira em 30 dias.
+- As fotos das marcações se perdem a cada novo deploy (não há disco permanente).
+- **Reconhecimento facial desligado** (`FACIAL_ATIVO=false`): ele usa ~500 MB e o plano tem 512 MB no total. Quem tiver o facial marcado bate ponto com foto simples.
+
+Para usar com clientes: servidor no plano **Standard** (2 GB) com `FACIAL_ATIVO=true`, banco pago e um disco permanente para as fotos com `UPLOADS_DIR` apontando para ele (veja os comentários no `render.yaml`).
+
+### Variáveis de ambiente
+
+| Variável | Para quê |
+|---|---|
+| `DATABASE_URL` | Conexão com o banco |
+| `JWT_SECRET` | Segredo dos logins (longo e aleatório) |
+| `FACIAL_ATIVO` | `false` desliga o reconhecimento facial e economiza ~400 MB |
+| `UPLOADS_DIR` | Pasta das fotos (padrão: `uploads`) |
+| `PORT` | Porta do servidor (o Render define sozinho) |
+
+Câmera e GPS só funcionam em HTTPS (o Render já entrega com HTTPS).

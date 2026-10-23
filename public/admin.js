@@ -153,6 +153,7 @@ function formFuncionario(f, jornadas) {
     <label class="check"><input type="checkbox" name="exigeSelfie" ${f?.exigeSelfie === false ? "" : "checked"}> Exigir foto ao bater ponto</label>
     <label class="check"><input type="checkbox" name="exigeGps" ${f?.exigeGps === false ? "" : "checked"}> Exigir localização (GPS)</label>
     <label class="check"><input type="checkbox" name="exigeFacial" ${f?.exigeFacial ? "checked" : ""}> Exigir reconhecimento facial com prova de vida</label>
+    ${eu?.recursos?.facial === false ? '<p class="alerta warn small" style="margin:0 0 8px">O reconhecimento facial está desligado neste servidor. Quem tiver essa opção marcada bate ponto com foto simples, sem verificação do rosto.</p>' : ""}
     ${f ? `<div class="acoes" style="margin:4px 0 8px 26px"><span class="small ${f.rostoCadastrado ? "" : "muted"}">${f.rostoCadastrado ? "Rosto cadastrado" : "Rosto não cadastrado"}</span>
       <button type="button" class="sm" id="btn-rosto">${f.rostoCadastrado ? "Ver / trocar foto" : "Cadastrar rosto"}</button></div>` : ""}
     ${f ? `<label class="check"><input type="checkbox" name="ativo" ${f.ativo ? "checked" : ""}> Ativo</label>` : ""}

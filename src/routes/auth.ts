@@ -4,6 +4,7 @@ import { z } from "zod";
 import { autenticar, gerarToken, type Papel } from "../auth.js";
 import { prisma } from "../db.js";
 import { ErroHttp } from "../lib/erros.js";
+import { FACIAL_ATIVO } from "../lib/face.js";
 import { rota, sessao } from "./util.js";
 
 export const rotasAuth = Router();
@@ -92,7 +93,7 @@ rotasAuth.get(
         empresa: { select: { razaoSocial: true, cnpj: true, plano: true } },
       },
     });
-    res.json(u);
+    res.json({ ...u, recursos: { facial: FACIAL_ATIVO } });
   }),
 );
 

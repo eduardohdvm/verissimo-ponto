@@ -1,5 +1,5 @@
 {
-  "name": "sistema-ponto",
+  "name": "verissimo-ponto",
   "version": "0.1.0",
   "private": true,
   "description": "Sistema de ponto eletrônico SaaS multiempresa, com API de integração para ERP",
@@ -10,7 +10,9 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "test": "tsx --test src/**/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "render:build": "node scripts/usar-postgres.mjs && prisma generate",
+    "render:start": "prisma db push --skip-generate && tsx src/server.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -22,6 +24,8 @@
     "express": "^4.22.3",
     "jpeg-js": "^0.4.4",
     "jsonwebtoken": "^9.0.3",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.15",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -29,8 +33,6 @@
     "@types/express": "^4.17.25",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.5",
-    "prisma": "^6.19.3",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "allowScripts": {
@@ -38,5 +40,8 @@
     "esbuild@0.28.2": true,
     "prisma@6.19.3": true,
     "@prisma/engines@6.19.3": true
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

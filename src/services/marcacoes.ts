@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../db.js";
 import { ErroHttp } from "../lib/erros.js";
-import { decodificarJpeg } from "../lib/face.js";
+import { decodificarJpeg, FACIAL_ATIVO } from "../lib/face.js";
 import { distanciaMetros } from "../lib/geo.js";
 import { isoComOffset } from "../lib/tempo.js";
 import { PASTA_UPLOADS, verificarRosto, type Quadro } from "./facial.js";
@@ -66,7 +66,7 @@ export async function registrarMarcacao(n: NovaMarcacao) {
   let fotoBytes: Buffer | null = null;
   let distanciaFacial: number | null = null;
   let provaVida: string | null = null;
-  if (func.exigeFacial) {
+  if (func.exigeFacial && FACIAL_ATIVO) {
     const v = await verificarRosto({
       empresaId: n.empresaId,
       funcionarioId: func.id,
@@ -80,7 +80,7 @@ export async function registrarMarcacao(n: NovaMarcacao) {
     fotoBytes = v.foto;
     distanciaFacial = v.distancia;
     provaVida = v.provaVida;
-  } else if (func.exigeSelfie) {
+  } else if (func.exigeSelfie || func.exigeFacial) {
     if (!n.selfieBase64) throw new ErroHttp(400, "A foto é obrigatória para bater o ponto");
     fotoBytes = decodificarJpeg(n.selfieBase64);
     if (fotoBytes.length < 1000 || fotoBytes.length > 2_000_000) throw new ErroHttp(400, "Foto inválida");

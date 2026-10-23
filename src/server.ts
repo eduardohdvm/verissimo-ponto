@@ -4,7 +4,7 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { ZodError } from "zod";
 import { ErroHttp } from "./lib/erros.js";
-import { iniciarFace } from "./lib/face.js";
+import { FACIAL_ATIVO, iniciarFace } from "./lib/face.js";
 import { rotasAdmin } from "./routes/admin.js";
 import { rotasApiV1 } from "./routes/api-v1.js";
 import { rotasAuth } from "./routes/auth.js";
@@ -40,7 +40,11 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 const porta = Number(process.env.PORT ?? 3000);
 app.listen(porta, () => console.log(`Sistema de ponto rodando em http://localhost:${porta}`));
 // Carrega os modelos de rosto já na subida, para a primeira marcação não demorar
-iniciarFace().then(
-  () => console.log("Reconhecimento facial pronto"),
-  (e) => console.error("Falha ao carregar o reconhecimento facial:", e),
-);
+if (FACIAL_ATIVO) {
+  iniciarFace().then(
+    () => console.log("Reconhecimento facial pronto"),
+    (e) => console.error("Falha ao carregar o reconhecimento facial:", e),
+  );
+} else {
+  console.log("Reconhecimento facial desativado (FACIAL_ATIVO=false)");
+}

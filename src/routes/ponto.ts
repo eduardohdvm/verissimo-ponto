@@ -6,6 +6,7 @@ import { prisma } from "../db.js";
 import { ErroHttp, naoEncontrado } from "../lib/erros.js";
 import { partesLocais, somarDias, utcDeLocal } from "../lib/tempo.js";
 import { gerarEspelho, periodoDoMes } from "../services/espelho.js";
+import { FACIAL_ATIVO } from "../lib/face.js";
 import { criarDesafio } from "../services/facial.js";
 import { montarComprovante, registrarMarcacao } from "../services/marcacoes.js";
 import { criarTratamento } from "./admin.js";
@@ -78,9 +79,10 @@ rotasPonto.get(
     res.json({
       funcionario: {
         nome: f.nome,
-        exigeSelfie: f.exigeSelfie,
+        // Com o facial desligado no servidor, quem exige facial bate ponto com selfie simples
+        exigeSelfie: f.exigeSelfie || (f.exigeFacial && !FACIAL_ATIVO),
         exigeGps: f.exigeGps,
-        exigeFacial: f.exigeFacial,
+        exigeFacial: f.exigeFacial && FACIAL_ATIVO,
         rostoCadastrado: !!f.descritorFacial,
       },
       empresa: f.empresa.razaoSocial,

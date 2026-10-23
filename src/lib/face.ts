@@ -6,16 +6,26 @@ import jpeg from "jpeg-js";
 import { ErroHttp } from "./erros.js";
 
 const require = createRequire(import.meta.url);
-const tf = require("@tensorflow/tfjs") as typeof import("@tensorflow/tfjs");
-const wasm = require("@tensorflow/tfjs-backend-wasm") as typeof import("@tensorflow/tfjs-backend-wasm");
-const faceapi = require("@vladmandic/face-api/dist/face-api.node-wasm.js") as typeof import("@vladmandic/face-api");
+
+/**
+ * O reconhecimento facial usa ~500 MB de memória. Com FACIAL_ATIVO=false (ex.: Render grátis,
+ * que tem 512 MB) as bibliotecas nem são carregadas e quem exige facial bate ponto com selfie simples.
+ */
+export const FACIAL_ATIVO = process.env.FACIAL_ATIVO !== "false";
 
 const PASTA_MODELOS = path.join(path.dirname(require.resolve("@vladmandic/face-api/package.json")), "model");
 
+// Carregados só quando o facial é usado, para não ocupar memória quando está desligado
+let tf!: typeof import("@tensorflow/tfjs");
+let faceapi!: typeof import("@vladmandic/face-api");
 let pronto: Promise<void> | null = null;
 
 export function iniciarFace(): Promise<void> {
+  if (!FACIAL_ATIVO) return Promise.reject(new ErroHttp(503, "Reconhecimento facial desativado neste servidor"));
   pronto ??= (async () => {
+    tf = require("@tensorflow/tfjs");
+    const wasm = require("@tensorflow/tfjs-backend-wasm") as typeof import("@tensorflow/tfjs-backend-wasm");
+    faceapi = require("@vladmandic/face-api/dist/face-api.node-wasm.js");
     wasm.setWasmPaths(path.dirname(require.resolve("@tensorflow/tfjs-backend-wasm")) + path.sep);
     await tf.setBackend("wasm");
     await tf.ready();
