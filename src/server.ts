@@ -62,6 +62,12 @@ const porta = Number(process.env.PORT ?? 3000);
 app.listen(porta, () => console.log(`Sistema de ponto rodando em http://localhost:${porta}`));
 iniciarAlertas();
 iniciarRetencao();
+// SEED_DEMO=true: cria a empresa de demonstração (admin@demo.com.br e maria@demo.com.br) se ainda não existir
+if (process.env.SEED_DEMO === "true") {
+  import("../prisma/seed.js")
+    .then((m) => m.criarDemonstracao())
+    .catch((e) => console.error("Falha ao criar a demonstração:", e));
+}
 // Carrega os modelos de rosto já na subida, para a primeira marcação não demorar
 if (FACIAL_ATIVO) {
   iniciarFace().then(

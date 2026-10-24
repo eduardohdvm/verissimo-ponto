@@ -134,4 +134,5 @@ Configure um servidor SMTP (Gmail com senha de app, Brevo, Resend, Amazon SES…
 | `SUPERADMIN_EMAILS` | E-mails (separados por vírgula) com acesso a `/superadmin` |
 | `CONTATO_VENDAS` | Contato mostrado na tela de planos (ex.: WhatsApp) |
 | `ALERTAS_ATIVOS` | `false` desliga os alertas automáticos |
+| `SEED_DEMO` | `true` cria a empresa de demonstração na subida (`admin@demo.com.br` e `maria@demo.com.br`, senha `demo12345`), só se ainda não existir. Como a senha está no código, troque-a depois ou use só para demonstração |
 | `PORT` | Porta do servidor (o Render define sozinho) |

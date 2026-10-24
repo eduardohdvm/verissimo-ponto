@@ -1,8 +1,9 @@
-// Dados de demonstração: npm run db:seed
-// Acessos criados (somente para desenvolvimento):
+// Dados de demonstração: npm run db:seed (local) ou SEED_DEMO=true no servidor (cria na subida).
+// Acessos criados:
 //   RH:          admin@demo.com.br  / demo12345
 //   Funcionária: maria@demo.com.br  / demo12345
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import bcrypt from "bcryptjs";
 import { prisma } from "../src/db.js";
 import { partesLocais, somarDias, utcDeLocal } from "../src/lib/tempo.js";
@@ -10,9 +11,15 @@ import { partesLocais, somarDias, utcDeLocal } from "../src/lib/tempo.js";
 const FUSO = "America/Sao_Paulo";
 const SENHA = "demo12345";
 
-async function main() {
+/** Cria a empresa de demonstração; não faz nada se ela (ou um dos e-mails) já existir. */
+export async function criarDemonstracao() {
   if (await prisma.empresa.findUnique({ where: { cnpj: "11222333000181" } })) {
     console.log("Dados de demonstração já existem.");
+    return;
+  }
+  const emailEmUso = await prisma.usuario.findFirst({ where: { email: { in: ["admin@demo.com.br", "maria@demo.com.br"] } } });
+  if (emailEmUso) {
+    console.log(`Demonstração não criada: o e-mail ${emailEmUso.email} já é usado por outra empresa.`);
     return;
   }
   const senhaHash = await bcrypt.hash(SENHA, 10);
@@ -95,4 +102,7 @@ async function main() {
   console.log(`Demonstração criada: ${nsr} marcações. Login RH: admin@demo.com.br / ${SENHA}`);
 }
 
-main().finally(() => prisma.$disconnect());
+// Rodando direto (npm run db:seed): cria e fecha a conexão
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  criarDemonstracao().finally(() => prisma.$disconnect());
+}

@@ -34,7 +34,8 @@ services:
       - key: SUPERADMIN_EMAILS
         sync: false
       # Opcionais (veja o README): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_REMETENTE,
-      # CERT_PFX_BASE64, CERT_SENHA, REGISTRO_INPI, CONTATO_VENDAS
+      # CERT_PFX_BASE64, CERT_SENHA, REGISTRO_INPI, CONTATO_VENDAS,
+      # SEED_DEMO=true (cria a empresa de demonstração na subida, uma vez só)
     # disk:
     #   name: fotos
     #   mountPath: /var/data
