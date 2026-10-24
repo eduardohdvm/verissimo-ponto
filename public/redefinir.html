@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Criar senha · Sistema de Ponto</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="centro">
+    <div class="caixa stack">
+      <div class="marca" id="marca" style="justify-content:center;padding:0"></div>
+      <div class="card" id="carregando"><p class="muted">Verificando o link…</p></div>
+      <form id="form" class="card oculto">
+        <h1 id="titulo">Criar nova senha</h1>
+        <p class="muted small" id="quem"></p>
+        <label>Nova senha (mínimo 8 caracteres)<input name="senha" type="password" minlength="8" autocomplete="new-password" required></label>
+        <label>Repita a senha<input name="confirmacao" type="password" minlength="8" autocomplete="new-password" required></label>
+        <p id="erro" class="alerta oculto"></p>
+        <button class="primary" style="width:100%">Salvar e entrar</button>
+      </form>
+    </div>
+  </main>
+  <script type="module">
+    import { api, esc, token, LOGO } from "/app.js";
+
+    document.getElementById("marca").innerHTML = `${LOGO}<span>Sistema de Ponto</span>`;
+    const chave = new URLSearchParams(location.search).get("token") ?? "";
+    const form = document.getElementById("form");
+    const erro = document.getElementById("erro");
+    const mostrarErro = (msg) => { erro.textContent = msg; erro.classList.remove("oculto"); };
+
+    try {
+      const info = await api("GET", `/api/auth/link/${encodeURIComponent(chave)}`);
+      document.getElementById("titulo").textContent = info.tipo === "CONVITE" ? "Crie sua senha" : "Criar nova senha";
+      document.getElementById("quem").innerHTML = `${esc(info.nome)} · ${esc(info.email)}<br>${esc(info.empresa)}`;
+      form.classList.remove("oculto");
+    } catch (err) {
+      document.getElementById("carregando").innerHTML = `<p class="alerta">${esc(err.message)}</p><p><a href="/">Ir para o login</a></p>`;
+    }
+    document.getElementById("carregando").classList.toggle("oculto", !form.classList.contains("oculto"));
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      if (fd.get("senha") !== fd.get("confirmacao")) return mostrarErro("As senhas não são iguais");
+      try {
+        const r = await api("POST", "/api/auth/redefinir", { token: chave, senha: fd.get("senha") });
+        token.set(r.token);
+        location.href = r.papel === "FUNCIONARIO" ? "/ponto" : "/admin";
+      } catch (err) {
+        mostrarErro(err.message);
+      }
+    };
+  </script>
+</body>
+</html>

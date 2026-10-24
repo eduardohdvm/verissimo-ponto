@@ -57,6 +57,7 @@ export const dataBr = (data) => data.split("-").reverse().join("/");
 export const OCORRENCIAS = {
   FALTA: ["Falta", "danger"],
   MARCACAO_IMPAR: ["Marcação ímpar", "warn"],
+  ATRASO: ["Atraso", "warn"],
   INTERVALO_INSUFICIENTE: ["Intervalo < 1h", "warn"],
   INTERJORNADA_INSUFICIENTE: ["Interjornada < 11h", "warn"],
   HORA_EXTRA_ACIMA_LIMITE: ["Extra > 2h", "warn"],
@@ -76,8 +77,16 @@ export function periodoDoMes(mes) {
   return { inicio: `${mes}-01`, fim: `${mes}-${String(ultimo).padStart(2, "0")}` };
 }
 
+export const NOME_AFASTAMENTO = {
+  FERIAS: "Férias", ATESTADO: "Atestado", LICENCA: "Licença", FOLGA: "Folga", OUTRO: "Afastado",
+};
+
+/** Saldo sempre com sinal e 00:00 quando zerado (hhmm mostra "—" para zero). */
+export const saldo = (min) => (min > 0 ? "+" : "") + (min ? hhmm(min) : "00:00");
+
 /** Tabela do espelho de ponto; `acao(dia)` pode devolver HTML de uma coluna extra. */
 export function tabelaEspelho(e, acao) {
+  const percentuais = e.regras?.percentuais ?? Object.keys(e.totais.extras ?? {});
   const linhas = e.dias
     .map((d) => {
       const fds = d.previstoMin === 0 || d.feriado;
@@ -87,26 +96,35 @@ export function tabelaEspelho(e, acao) {
         <td class="tnum">${marc || (d.feriado ? `<span class="muted">${esc(d.feriado)}</span>` : "")}</td>
         <td class="num">${hhmm(d.previstoMin)}</td>
         <td class="num">${hhmm(d.trabalhadoMin)}</td>
-        <td class="num">${hhmm(d.extra50Min)}</td>
-        <td class="num">${hhmm(d.extra100Min)}</td>
+        ${percentuais.map((p) => `<td class="num">${hhmm(d.extras?.[p])}</td>`).join("")}
         <td class="num">${hhmm(d.noturnoReduzidoMin)}</td>
         <td class="num">${hhmm(d.debitoMin)}</td>
-        <td>${d.abonado ? '<span class="tag info">Abonado</span> ' : ""}${tagsOcorrencias(d.ocorrencias)}</td>
+        <td>${d.afastamento ? `<span class="tag info">${NOME_AFASTAMENTO[d.afastamento] ?? d.afastamento}</span> ` : d.abonado ? '<span class="tag info">Abonado</span> ' : ""}${tagsOcorrencias(d.ocorrencias)}</td>
         ${acao ? `<td class="nao-imprimir">${acao(d)}</td>` : ""}
       </tr>`;
     })
     .join("");
   const t = e.totais;
+  const resumo = [
+    `${t.faltas} falta(s)`,
+    t.atrasos ? `${t.atrasos} atraso(s)` : null,
+    t.diasAfastado ? `${t.diasAfastado} dia(s) de afastamento` : null,
+  ].filter(Boolean).join(" · ");
   return `<div class="tabela-wrap"><table>
     <thead><tr><th>Dia</th><th>Marcações</th><th class="num">Previsto</th><th class="num">Trabalhado</th>
-      <th class="num">Extra 50%</th><th class="num">Extra 100%</th><th class="num">Noturno</th><th class="num">Débito</th>
+      ${percentuais.map((p) => `<th class="num">Extra ${p}%</th>`).join("")}<th class="num">Noturno</th><th class="num">Débito</th>
       <th>Ocorrências</th>${acao ? '<th class="nao-imprimir"></th>' : ""}</tr></thead>
     <tbody>${linhas}</tbody>
-    <tfoot><tr><td colspan="2">Totais · ${t.faltas} falta(s)</td>
+    <tfoot><tr><td colspan="2">Totais · ${resumo}</td>
       <td class="num">${hhmm(t.previstoMin)}</td><td class="num">${hhmm(t.trabalhadoMin)}</td>
-      <td class="num">${hhmm(t.extra50Min)}</td><td class="num">${hhmm(t.extra100Min)}</td>
+      ${percentuais.map((p) => `<td class="num">${hhmm(t.extras?.[p])}</td>`).join("")}
       <td class="num">${hhmm(t.noturnoReduzidoMin)}</td><td class="num">${hhmm(t.debitoMin)}</td>
-      <td colspan="${acao ? 2 : 1}">Saldo banco: <strong>${hhmm(t.saldoBancoMin) === "—" ? "00:00" : hhmm(t.saldoBancoMin)}</strong></td></tr></tfoot>
+      <td colspan="${acao ? 2 : 1}"></td></tr></tfoot>
   </table></div>
+  <div class="acoes" style="margin-top:12px;gap:24px">
+    <span>Saldo do período: <strong>${saldo(t.saldoBancoMin)}</strong></span>
+    ${e.regras?.bancoHoras !== false && t.bancoAnteriorMin !== undefined ? `<span>Banco anterior: <strong>${saldo(t.bancoAnteriorMin)}</strong></span>
+      <span>Banco acumulado: <strong>${saldo(t.bancoAcumuladoMin)}</strong></span>` : ""}
+  </div>
   <p class="muted small">* marcação incluída por ajuste. A marcação original nunca é alterada.</p>`;
 }

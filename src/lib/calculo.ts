@@ -1,4 +1,5 @@
 // Motor de cálculo de jornada. Funções puras, sem acesso ao banco, para facilitar testes.
+import { distribuirExtras, REGRAS_PADRAO, type Regras } from "./regras.js";
 import { diasEntre, horaParaMin, offsetMs, partesLocais } from "./tempo.js";
 
 export type Intervalo = [string, string]; // ["08:00","12:00"]; fim < início = vira o dia
@@ -18,6 +19,7 @@ export interface JornadaCalc {
 
 export type Ocorrencia =
   | "FALTA"
+  | "ATRASO"
   | "MARCACAO_IMPAR"
   | "INTERVALO_INSUFICIENTE"
   | "INTERJORNADA_INSUFICIENTE"
@@ -28,12 +30,14 @@ export interface ResultadoDia {
   marcacoes: { hora: string; incluida: boolean }[]; // incluida = veio de tratamento
   previstoMin: number;
   trabalhadoMin: number;
-  extra50Min: number;
-  extra100Min: number;
+  extraMin: number;
+  extras: Record<string, number>; // minutos extras por percentual, ex.: { "50": 120, "100": 30 }
   debitoMin: number;
+  atrasoMin: number; // quanto a primeira entrada passou do horário (além da tolerância)
   noturnoMin: number; // minutos reais entre 22h e 5h
-  noturnoReduzidoMin: number; // convertidos pela hora noturna de 52m30s
+  noturnoReduzidoMin: number; // convertidos pela hora noturna de 52m30s (se a regra estiver ligada)
   abonado: boolean;
+  afastamento: string | null; // FERIAS | ATESTADO | LICENCA | FOLGA | OUTRO
   feriado: string | null;
   ocorrencias: Ocorrencia[];
 }
@@ -105,7 +109,9 @@ export interface EntradaCalculo {
   fuso: string;
   feriados: Map<string, string>;
   abonos: Set<string>;
+  afastamentos?: Map<string, string>; // dia -> tipo (férias, atestado...)
   incluidas?: Set<number>; // timestamps das marcações vindas de tratamento de inclusão
+  regras?: Regras;
 }
 
 export function calcularPeriodo(e: EntradaCalculo): ResultadoDia[] {
@@ -129,8 +135,11 @@ export function calcularPeriodo(e: EntradaCalculo): ResultadoDia[] {
     const previstoMin = minutosPrevistos(intervalos);
     const tolerancia = e.jornada?.toleranciaMin ?? 10;
     const feriado = e.feriados.get(data) ?? null;
-    const abonado = e.abonos.has(data);
+    const afastamento = e.afastamentos?.get(data) ?? null;
+    // Afastamento aprovado (férias, atestado...) funciona como abono: sem falta e sem débito
+    const abonado = e.abonos.has(data) || afastamento !== null;
     const domingo = new Date(data + "T00:00:00Z").getUTCDay() === 0;
+    const regras = e.regras ?? REGRAS_PADRAO;
     const ocorrencias = new Set<Ocorrencia>();
 
     let trabalhadoMs = 0;
@@ -156,27 +165,41 @@ export function calcularPeriodo(e: EntradaCalculo): ResultadoDia[] {
     }
 
     const trabalhadoMin = Math.round(trabalhadoMs / 60_000);
-    let extra50Min = 0;
-    let extra100Min = 0;
+    let extraMin = 0;
+    let extras: Record<string, number> = {};
     let debitoMin = 0;
+    let atrasoMin = 0;
 
     if (previstoMin === 0 || feriado) {
       // Dia sem jornada prevista: tudo que for trabalhado é extra
-      if (domingo || feriado) extra100Min = trabalhadoMin;
-      else extra50Min = trabalhadoMin;
+      extraMin = trabalhadoMin;
+      extras = domingo || feriado
+        ? { [regras.percentualDomingoFeriado]: trabalhadoMin }
+        : distribuirExtras(trabalhadoMin, regras.faixasExtra);
     } else {
       const saldo = trabalhadoMin - previstoMin;
       if (Math.abs(saldo) > tolerancia) {
-        if (saldo > 0) extra50Min = saldo;
-        else if (!abonado) debitoMin = -saldo;
+        if (saldo > 0) {
+          extraMin = saldo;
+          extras = distribuirExtras(saldo, regras.faixasExtra);
+        } else if (!abonado) debitoMin = -saldo;
       }
       if (turnos.length === 0 && !abonado) ocorrencias.add("FALTA");
+      // Atraso: primeira entrada depois do início previsto, além da tolerância
+      if (marcasDoDia.length && intervalos.length && !abonado) {
+        const diff = partesLocais(marcasDoDia[0], e.fuso).minutoDoDia - horaParaMin(intervalos[0][0]);
+        if (diff > tolerancia && diff < 12 * 60) {
+          atrasoMin = diff;
+          ocorrencias.add("ATRASO");
+        }
+      }
     }
+    if (trabalhadoMin === 0) extras = {};
 
     // CLT art. 71: mais de 6h de trabalho exige intervalo mínimo de 1h
     if (trabalhadoMin > 360 && maiorIntervaloMs < 3600_000) ocorrencias.add("INTERVALO_INSUFICIENTE");
     // CLT art. 59: limite de 2h extras por dia
-    if (previstoMin > 0 && extra50Min + extra100Min > 120) ocorrencias.add("HORA_EXTRA_ACIMA_LIMITE");
+    if (previstoMin > 0 && extraMin > 120) ocorrencias.add("HORA_EXTRA_ACIMA_LIMITE");
 
     return {
       data,
@@ -186,12 +209,14 @@ export function calcularPeriodo(e: EntradaCalculo): ResultadoDia[] {
       })),
       previstoMin,
       trabalhadoMin,
-      extra50Min,
-      extra100Min,
+      extraMin,
+      extras,
       debitoMin,
+      atrasoMin,
       noturnoMin,
-      noturnoReduzidoMin: Math.round((noturnoMin * 60) / 52.5),
+      noturnoReduzidoMin: regras.horaNoturnaReduzida ? Math.round((noturnoMin * 60) / 52.5) : noturnoMin,
       abonado,
+      afastamento,
       feriado,
       ocorrencias: [...ocorrencias],
     };
@@ -201,35 +226,44 @@ export function calcularPeriodo(e: EntradaCalculo): ResultadoDia[] {
 export interface Totais {
   previstoMin: number;
   trabalhadoMin: number;
-  extra50Min: number;
-  extra100Min: number;
+  extraMin: number;
+  extras: Record<string, number>;
   debitoMin: number;
+  atrasoMin: number;
+  atrasos: number;
   noturnoReduzidoMin: number;
   faltas: number;
-  saldoBancoMin: number;
+  diasAfastado: number;
+  saldoBancoMin: number; // saldo do período (extras - débitos)
 }
 
 export function totalizar(dias: ResultadoDia[]): Totais {
   const t: Totais = {
     previstoMin: 0,
     trabalhadoMin: 0,
-    extra50Min: 0,
-    extra100Min: 0,
+    extraMin: 0,
+    extras: {},
     debitoMin: 0,
+    atrasoMin: 0,
+    atrasos: 0,
     noturnoReduzidoMin: 0,
     faltas: 0,
+    diasAfastado: 0,
     saldoBancoMin: 0,
   };
   for (const d of dias) {
     t.previstoMin += d.previstoMin;
     t.trabalhadoMin += d.trabalhadoMin;
-    t.extra50Min += d.extra50Min;
-    t.extra100Min += d.extra100Min;
+    t.extraMin += d.extraMin;
+    for (const [p, min] of Object.entries(d.extras)) t.extras[p] = (t.extras[p] ?? 0) + min;
     t.debitoMin += d.debitoMin;
+    t.atrasoMin += d.atrasoMin;
     t.noturnoReduzidoMin += d.noturnoReduzidoMin;
     if (d.ocorrencias.includes("FALTA")) t.faltas++;
+    if (d.ocorrencias.includes("ATRASO")) t.atrasos++;
+    if (d.afastamento && d.previstoMin > 0) t.diasAfastado++;
   }
-  t.saldoBancoMin = t.extra50Min + t.extra100Min - t.debitoMin;
+  t.saldoBancoMin = t.extraMin - t.debitoMin;
   return t;
 }
 

@@ -5,7 +5,7 @@ import { prisma } from "../db.js";
 import { ErroHttp } from "../lib/erros.js";
 import { decodificarJpeg, FACIAL_ATIVO } from "../lib/face.js";
 import { distanciaMetros } from "../lib/geo.js";
-import { isoComOffset } from "../lib/tempo.js";
+import { isoComOffset, partesLocais, utcDeLocal } from "../lib/tempo.js";
 import { PASTA_UPLOADS, verificarRosto, type Quadro } from "./facial.js";
 import { dispararWebhook } from "./webhooks.js";
 
@@ -15,7 +15,9 @@ const MAX_OFFLINE_MS = 7 * 86400_000;
 export interface NovaMarcacao {
   empresaId: string;
   funcionarioId: string;
-  origem: "WEB" | "MOBILE";
+  origem: "WEB" | "MOBILE" | "QUIOSQUE";
+  quiosque?: { id: string; localId: string | null }; // tablet da empresa: dispensa o GPS do funcionário
+  rostoVerificado?: { foto: Buffer; distancia: number; provaVida: string }; // já identificado no quiosque
   latitude?: number;
   longitude?: number;
   precisaoGps?: number;
@@ -46,8 +48,8 @@ export async function registrarMarcacao(n: NovaMarcacao) {
     online = false;
   }
 
-  let localId: string | null = null;
-  if (func.exigeGps) {
+  let localId: string | null = n.quiosque?.localId ?? null;
+  if (func.exigeGps && !n.quiosque) {
     if (n.latitude == null || n.longitude == null) throw new ErroHttp(400, "Ative a localização para bater o ponto");
     const locais = func.empresa.locais;
     if (locais.length) {
@@ -66,7 +68,11 @@ export async function registrarMarcacao(n: NovaMarcacao) {
   let fotoBytes: Buffer | null = null;
   let distanciaFacial: number | null = null;
   let provaVida: string | null = null;
-  if (func.exigeFacial && FACIAL_ATIVO) {
+  if (n.rostoVerificado) {
+    fotoBytes = n.rostoVerificado.foto;
+    distanciaFacial = n.rostoVerificado.distancia;
+    provaVida = n.rostoVerificado.provaVida;
+  } else if (func.exigeFacial && FACIAL_ATIVO && !n.quiosque) {
     const v = await verificarRosto({
       empresaId: n.empresaId,
       funcionarioId: func.id,
@@ -80,7 +86,7 @@ export async function registrarMarcacao(n: NovaMarcacao) {
     fotoBytes = v.foto;
     distanciaFacial = v.distancia;
     provaVida = v.provaVida;
-  } else if (func.exigeSelfie || func.exigeFacial) {
+  } else if (func.exigeSelfie || func.exigeFacial || n.selfieBase64) {
     if (!n.selfieBase64) throw new ErroHttp(400, "A foto é obrigatória para bater o ponto");
     fotoBytes = decodificarJpeg(n.selfieBase64);
     if (fotoBytes.length < 1000 || fotoBytes.length > 2_000_000) throw new ErroHttp(400, "Foto inválida");
@@ -107,6 +113,7 @@ export async function registrarMarcacao(n: NovaMarcacao) {
         nsr: emp.ultimoNsr,
         dataHora,
         origem: n.origem,
+        quiosqueId: n.quiosque?.id,
         online,
         latitude: n.latitude,
         longitude: n.longitude,
@@ -128,7 +135,12 @@ export async function registrarMarcacao(n: NovaMarcacao) {
     funcionarioId: func.id,
     codigoExterno: func.codigoExterno,
   });
-  return comprovante;
+  // Posição da marcação no dia (1ª = entrada, 2ª = saída para o intervalo...), para a tela mostrar
+  const hoje = partesLocais(dataHora, func.empresa.fusoHorario).data;
+  const sequenciaHoje = await prisma.marcacao.count({
+    where: { funcionarioId: func.id, dataHora: { gte: utcDeLocal(hoje, "00:00", func.empresa.fusoHorario), lte: dataHora } },
+  });
+  return { ...comprovante, sequenciaHoje };
 }
 
 /** Dados do comprovante de registro de ponto entregue ao trabalhador. */

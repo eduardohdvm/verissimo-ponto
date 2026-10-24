@@ -1,5 +1,5 @@
-// Banco: SQLite em desenvolvimento. Para produção, troque o provider para
-// "postgresql" e aponte DATABASE_URL para o Postgres (nenhum outro ajuste necessário).
+// Banco: SQLite em desenvolvimento. Em produção (Render) o build troca para PostgreSQL
+// (scripts/usar-postgres.mjs). Mudanças aqui devem ser só aditivas: a produção usa "prisma db push".
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,84 +11,159 @@ datasource db {
 
 // Cada empresa cliente do SaaS é um tenant. Todos os dados carregam empresaId.
 model Empresa {
-  id            String   @id @default(cuid())
-  razaoSocial   String
-  cnpj          String   @unique
-  fusoHorario   String   @default("America/Sao_Paulo")
-  plano         String   @default("TRIAL") // TRIAL | BASICO | PRO
-  usaBancoHoras Boolean  @default(true)
-  ultimoNsr     Int      @default(0) // NSR sequencial exigido pela Portaria 671
-  ultimoHash    String   @default("") // encadeamento de hash das marcações
+  id                String    @id @default(cuid())
+  razaoSocial       String
+  cnpj              String    @unique
+  fusoHorario       String    @default("America/Sao_Paulo")
+  plano             String    @default("TRIAL") // TRIAL | BASICO | PRO (ver src/lib/planos.ts)
+  trialAte          DateTime?
+  bloqueada         Boolean   @default(false) // bloqueio manual pelo dono do SaaS (ex.: falta de pagamento)
+  // JSON com regras de horas extras, banco de horas etc. (ver src/lib/regras.ts)
+  regras            String    @default("{}")
+  retencaoFotosDias Int       @default(365) // LGPD: fotos mais antigas são apagadas automaticamente
+  usaBancoHoras     Boolean   @default(true)
+  ultimoNsr         Int       @default(0) // NSR sequencial exigido pela Portaria 671
+  ultimoHash        String    @default("") // encadeamento de hash das marcações
   // Distância máxima entre o rosto do ponto e o do cadastro (menor = mais rigoroso)
-  limiarFacial  Float    @default(0.5)
-  criadoEm      DateTime @default(now())
+  limiarFacial      Float     @default(0.5)
+  criadoEm          DateTime  @default(now())
 
-  usuarios     Usuario[]
+  usuarios      Usuario[]
+  funcionarios  Funcionario[]
+  jornadas      Jornada[]
+  locais        LocalPermitido[]
+  marcacoes     Marcacao[]
+  tratamentos   Tratamento[]
+  tentativas    TentativaRecusada[]
+  feriados      Feriado[]
+  apiKeys       ApiKey[]
+  webhooks      Webhook[]
+  filiais       Filial[]
+  departamentos Departamento[]
+  afastamentos  Afastamento[]
+  fechamentos   Fechamento[]
+  quiosques     Quiosque[]
+  notificacoes  Notificacao[]
+}
+
+model Filial {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  nome      String
+  cnpj      String?
+  cidade    String?
+  uf        String?
+
+  departamentos Departamento[]
+  funcionarios  Funcionario[]
+  feriados      Feriado[]
+}
+
+model Departamento {
+  id        String  @id @default(cuid())
+  empresaId String
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+  nome      String
+  filialId  String?
+  filial    Filial? @relation(fields: [filialId], references: [id])
+
   funcionarios Funcionario[]
-  jornadas     Jornada[]
-  locais       LocalPermitido[]
-  marcacoes    Marcacao[]
-  tratamentos  Tratamento[]
-  tentativas   TentativaRecusada[]
-  feriados     Feriado[]
-  apiKeys      ApiKey[]
-  webhooks     Webhook[]
+  gestores     GestorDepartamento[]
+}
+
+// Gestor (Usuario com papel GESTOR) só vê e aprova os funcionários destes departamentos
+model GestorDepartamento {
+  usuarioId      String
+  usuario        Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  departamentoId String
+  departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, departamentoId])
 }
 
 model Usuario {
-  id            String       @id @default(cuid())
-  empresaId     String
-  empresa       Empresa      @relation(fields: [empresaId], references: [id])
-  nome          String
-  email         String       @unique
-  senhaHash     String
-  papel         String // ADMIN | GESTOR | FUNCIONARIO
-  funcionarioId String?      @unique
-  funcionario   Funcionario? @relation(fields: [funcionarioId], references: [id])
-  criadoEm      DateTime     @default(now())
+  id                  String       @id @default(cuid())
+  empresaId           String
+  empresa             Empresa      @relation(fields: [empresaId], references: [id])
+  nome                String
+  email               String       @unique
+  senhaHash           String
+  papel               String // ADMIN | GESTOR | FUNCIONARIO
+  funcionarioId       String?      @unique
+  funcionario         Funcionario? @relation(fields: [funcionarioId], references: [id])
+  ativo               Boolean      @default(true)
+  // LGPD: aceite do termo de uso de foto, biometria e localização
+  consentimentoEm     DateTime?
+  consentimentoVersao String?
+  criadoEm            DateTime     @default(now())
+
+  departamentosGeridos GestorDepartamento[]
+  tokens               TokenAcesso[]
+  inscricoesPush       PushInscricao[]
+  notificacoes         Notificacao[]
+}
+
+// Links de uso único enviados por e-mail: redefinir senha e convite de primeiro acesso
+model TokenAcesso {
+  id        String    @id @default(cuid())
+  usuarioId String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo      String // REDEFINIR | CONVITE
+  hash      String    @unique // sha256 do token; o token em si só vai no e-mail
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  criadoEm  DateTime  @default(now())
 }
 
 model Funcionario {
-  id            String   @id @default(cuid())
-  empresaId     String
-  empresa       Empresa  @relation(fields: [empresaId], references: [id])
-  nome          String
-  cpf           String
-  pis           String?
-  matricula     String?
-  cargo         String?
-  admissao      DateTime?
-  ativo         Boolean  @default(true)
-  exigeSelfie   Boolean  @default(true)
-  exigeGps      Boolean  @default(true)
-  exigeFacial   Boolean  @default(false)
+  id                 String        @id @default(cuid())
+  empresaId          String
+  empresa            Empresa       @relation(fields: [empresaId], references: [id])
+  nome               String
+  cpf                String
+  pis                String?
+  matricula          String?
+  cargo              String?
+  admissao           DateTime?
+  ativo              Boolean       @default(true)
+  exigeSelfie        Boolean       @default(true)
+  exigeGps           Boolean       @default(true)
+  exigeFacial        Boolean       @default(false)
   // Rosto de referência, cadastrado pelo RH
   fotoCadastro       String?
   descritorFacial    String? // JSON com 128 números
   facialCadastradoEm DateTime?
   // Id do funcionário no ERP — chave usada pela API de integração
-  codigoExterno String?
-  jornadaId     String?
-  jornada       Jornada? @relation(fields: [jornadaId], references: [id])
-  criadoEm      DateTime @default(now())
+  codigoExterno      String?
+  jornadaId          String?
+  jornada            Jornada?      @relation(fields: [jornadaId], references: [id])
+  departamentoId     String?
+  departamento       Departamento? @relation(fields: [departamentoId], references: [id])
+  filialId           String?
+  filial             Filial?       @relation(fields: [filialId], references: [id])
+  pinHash            String? // PIN do modo quiosque (usado quando o reconhecimento facial está desligado)
+  criadoEm           DateTime      @default(now())
 
-  usuario     Usuario?
-  marcacoes   Marcacao[]
-  tratamentos Tratamento[]
-  tentativas  TentativaRecusada[]
+  usuario      Usuario?
+  marcacoes    Marcacao[]
+  tratamentos  Tratamento[]
+  tentativas   TentativaRecusada[]
+  afastamentos Afastamento[]
+  assinaturas  AssinaturaEspelho[]
 
   @@unique([empresaId, cpf])
   @@unique([empresaId, codigoExterno])
 }
 
 model Jornada {
-  id            String @id @default(cuid())
+  id            String  @id @default(cuid())
   empresaId     String
   empresa       Empresa @relation(fields: [empresaId], references: [id])
   nome          String
   // JSON: { "0": [], "1": [["08:00","12:00"],["13:00","17:00"]], ... } — 0 = domingo
   horarios      String
-  toleranciaMin Int    @default(10) // CLT art. 58 §1º: até 10 min diários não contam
+  toleranciaMin Int     @default(10) // CLT art. 58 §1º: até 10 min diários não contam
 
   funcionarios Funcionario[]
 }
@@ -106,26 +181,27 @@ model LocalPermitido {
 // Marcação original: NUNCA é alterada nem apagada (Portaria 671).
 // Correções são feitas por Tratamento.
 model Marcacao {
-  id            String      @id @default(cuid())
-  empresaId     String
-  empresa       Empresa     @relation(fields: [empresaId], references: [id])
-  funcionarioId String
-  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
-  nsr           Int
-  dataHora      DateTime
-  origem        String // WEB | MOBILE
-  online        Boolean     @default(true)
-  latitude      Float?
-  longitude     Float?
-  precisaoGps   Float?
-  localId       String?
-  selfie        String? // caminho do arquivo em uploads/
+  id              String      @id @default(cuid())
+  empresaId       String
+  empresa         Empresa     @relation(fields: [empresaId], references: [id])
+  funcionarioId   String
+  funcionario     Funcionario @relation(fields: [funcionarioId], references: [id])
+  nsr             Int
+  dataHora        DateTime
+  origem          String // WEB | MOBILE | QUIOSQUE
+  quiosqueId      String?
+  online          Boolean     @default(true)
+  latitude        Float?
+  longitude       Float?
+  precisaoGps     Float?
+  localId         String?
+  selfie          String? // caminho do arquivo em uploads/
   distanciaFacial Float? // distância para o rosto do cadastro (null = sem reconhecimento)
   provaVida       String? // SERVIDOR (desafio emitido pelo servidor) | OFFLINE (desafio gerado no aparelho)
-  ip            String?
-  userAgent     String?
-  hash          String
-  criadoEm      DateTime    @default(now())
+  ip              String?
+  userAgent       String?
+  hash            String
+  criadoEm        DateTime    @default(now())
 
   tratamentos Tratamento[]
 
@@ -160,8 +236,118 @@ model Feriado {
   empresa   Empresa @relation(fields: [empresaId], references: [id])
   data      String // AAAA-MM-DD
   descricao String
+  filialId  String? // vazio = vale para a empresa toda; preenchido = feriado local da filial
+  filial    Filial? @relation(fields: [filialId], references: [id])
 
-  @@unique([empresaId, data])
+  @@index([empresaId, data])
+}
+
+// Férias, atestados, licenças: dias sem falta e sem débito
+model Afastamento {
+  id            String      @id @default(cuid())
+  empresaId     String
+  empresa       Empresa     @relation(fields: [empresaId], references: [id])
+  funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+  tipo          String // FERIAS | ATESTADO | LICENCA | FOLGA | OUTRO
+  inicio        String // AAAA-MM-DD
+  fim           String // AAAA-MM-DD
+  observacao    String?
+  anexo         String? // foto do atestado em uploads/
+  status        String      @default("APROVADO") // PENDENTE (enviado pelo funcionário) | APROVADO | REJEITADO
+  solicitadoPor String
+  decididoPor   String?
+  decididoEm    DateTime?
+  criadoEm      DateTime    @default(now())
+
+  @@index([empresaId, funcionarioId, inicio])
+}
+
+// Fechamento do período: congela o espelho e pede a assinatura de cada funcionário
+model Fechamento {
+  id               String    @id @default(cuid())
+  empresaId        String
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  inicio           String
+  fim              String
+  status           String    @default("FECHADO") // FECHADO | REABERTO
+  fechadoPor       String
+  fechadoEm        DateTime  @default(now())
+  reabertoPor      String?
+  reabertoEm       DateTime?
+  motivoReabertura String?
+
+  assinaturas AssinaturaEspelho[]
+
+  @@index([empresaId, inicio])
+}
+
+model AssinaturaEspelho {
+  id            String      @id @default(cuid())
+  fechamentoId  String
+  fechamento    Fechamento  @relation(fields: [fechamentoId], references: [id], onDelete: Cascade)
+  empresaId     String
+  funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+  espelho       String // JSON do espelho no momento do fechamento (não muda mais)
+  hash          String // sha256 do JSON acima: prova de que o assinado é o mesmo que foi fechado
+  saldoBancoMin Int         @default(0)
+  status        String      @default("PENDENTE") // PENDENTE | ASSINADO | CONTESTADO
+  assinadoEm    DateTime?
+  ip            String?
+  userAgent     String?
+  observacao    String? // motivo da contestação
+  criadoEm      DateTime    @default(now())
+
+  @@unique([fechamentoId, funcionarioId])
+}
+
+// Tablet compartilhado na entrada da empresa
+model Quiosque {
+  id               String    @id @default(cuid())
+  empresaId        String
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  nome             String
+  tokenHash        String?   @unique // credencial do aparelho, criada no pareamento
+  codigoPareamento String?   @unique
+  codigoExpiraEm   DateTime?
+  localId          String?
+  permitePin       Boolean   @default(true) // matrícula + PIN como alternativa ao rosto
+  ativo            Boolean   @default(true)
+  ultimoUso        DateTime?
+  criadoEm         DateTime  @default(now())
+}
+
+model PushInscricao {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  criadoEm  DateTime @default(now())
+}
+
+model Notificacao {
+  id        String    @id @default(cuid())
+  empresaId String
+  empresa   Empresa   @relation(fields: [empresaId], references: [id])
+  usuarioId String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  titulo    String
+  texto     String
+  link      String?
+  chave     String?   @unique // evita mandar o mesmo alerta duas vezes
+  lidaEm    DateTime?
+  criadoEm  DateTime  @default(now())
+
+  @@index([usuarioId, criadoEm])
+}
+
+// Configurações globais do sistema (ex.: chaves do Web Push geradas na primeira subida)
+model ConfigSistema {
+  chave String @id
+  valor String
 }
 
 model ApiKey {
@@ -189,16 +375,17 @@ model Webhook {
 
 // Tentativas de bater ponto recusadas pelo reconhecimento facial (auditoria e prevenção de fraude)
 model TentativaRecusada {
-  id              String      @id @default(cuid())
+  id              String       @id @default(cuid())
   empresaId       String
-  empresa         Empresa     @relation(fields: [empresaId], references: [id])
-  funcionarioId   String
-  funcionario     Funcionario @relation(fields: [funcionarioId], references: [id])
+  empresa         Empresa      @relation(fields: [empresaId], references: [id])
+  funcionarioId   String? // vazio: pessoa não reconhecida no quiosque
+  funcionario     Funcionario? @relation(fields: [funcionarioId], references: [id])
+  quiosqueId      String?
   motivo          String
   distanciaFacial Float?
   foto            String?
   ip              String?
-  criadoEm        DateTime    @default(now())
+  criadoEm        DateTime     @default(now())
 
   @@index([empresaId, criadoEm])
 }

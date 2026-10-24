@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Quiosque de ponto</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#1463d9">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    body { min-height: 100vh; }
+    .tela { max-width: 640px; margin: 0 auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 16px; min-height: 100vh; }
+    .cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .relogio { text-align: center; }
+    .relogio .hora { font-size: clamp(56px, 14vw, 96px); font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1; }
+    .camera { position: relative; aspect-ratio: 4 / 3; background: var(--surface-2); border-radius: 16px; overflow: hidden; display: grid; place-items: center; }
+    .camera video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .guia { position: absolute; inset: auto 0 0 0; padding: 16px; background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; text-align: center; font-size: 22px; font-weight: 600; }
+    .guia .barra { height: 5px; background: rgb(255 255 255 / 30%); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+    .guia .barra i { display: block; height: 100%; width: 0; background: #4cc58a; transition: width .3s; }
+    .grande { width: 100%; padding: 20px; font-size: 22px; border-radius: 14px; }
+    .resultado { text-align: center; padding: 32px 16px; border-radius: 16px; }
+    .resultado .nome { font-size: 32px; font-weight: 700; }
+    .resultado .tipo { font-size: 22px; margin-top: 8px; }
+    .teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+    .teclado button { padding: 18px; font-size: 26px; border-radius: 12px; }
+    .pin-visor { font-size: 32px; letter-spacing: 12px; text-align: center; min-height: 44px; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div class="tela" id="tela"></div>
+  <script type="module" src="/quiosque.js"></script>
+</body>
+</html>

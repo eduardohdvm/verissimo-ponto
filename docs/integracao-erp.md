@@ -64,21 +64,28 @@ Retorna as marcações **originais** em ordem de NSR, até 1000 por página. Se 
 
 `GET /api/v1/espelho?inicio=2026-10-01&fim=2026-10-31[&codigoExterno=ERP-1001][&detalhado=true]`
 
-Já considera os ajustes aprovados (inclusões, marcações desconsideradas, abonos), feriados e a jornada de cada funcionário. Todos os valores estão em **minutos**.
+Já considera os ajustes aprovados (inclusões, marcações desconsideradas, abonos), férias e atestados, feriados (da empresa e da filial), a jornada e as regras da convenção de cada empresa. Se o mês já foi fechado, devolve o espelho congelado no fechamento. Todos os valores estão em **minutos**.
 
 ```json
 {
   "periodo": { "inicio": "2026-10-01", "fim": "2026-10-31" },
   "funcionarios": [{
-    "funcionario": { "id": "…", "nome": "Maria Souza", "codigoExterno": "ERP-1001", "…": "…" },
+    "funcionario": { "id": "…", "nome": "Maria Souza", "codigoExterno": "ERP-1001", "departamento": "Vendas", "…": "…" },
     "totais": {
       "previstoMin": 8448, "trabalhadoMin": 8530,
-      "extra50Min": 286, "extra100Min": 0, "debitoMin": 204,
-      "noturnoReduzidoMin": 0, "faltas": 0, "saldoBancoMin": 82
+      "extraMin": 286, "extras": { "50": 240, "100": 46 },
+      "extra50Min": 240, "extra100Min": 46,
+      "debitoMin": 204, "atrasoMin": 35, "atrasos": 2,
+      "noturnoReduzidoMin": 0, "faltas": 0, "diasAfastado": 2,
+      "saldoBancoMin": 82, "bancoAnteriorMin": -30, "bancoAcumuladoMin": 52
     }
   }]
 }
 ```
+
+`extras` traz os minutos por percentual, conforme as faixas configuradas pela empresa (ex.: `"60"`, `"100"`). `extra50Min` e `extra100Min` continuam vindo para integrações antigas. `bancoAcumuladoMin` soma o saldo dos meses fechados ainda dentro da validade do banco de horas.
+
+O cadastro de funcionário (`PUT /api/v1/funcionarios/{codigoExterno}`) também aceita `departamentoId` e `filialId`.
 
 Com `detalhado=true`, cada funcionário também traz `dias` com o cálculo dia a dia.
 
@@ -91,6 +98,7 @@ Cadastre a URL do ERP em **Integrações (ERP) → Webhooks**. Eventos:
 | `marcacao.criada` | Um funcionário bateu ponto |
 | `tratamento.decidido` | O gestor aprovou ou rejeitou um ajuste |
 | `funcionario.alterado` | Um funcionário foi criado ou alterado |
+| `fechamento.concluido` | O RH fechou um período: bom momento para o ERP buscar `/api/v1/espelho` e lançar na folha |
 
 Corpo enviado (POST, JSON):
 

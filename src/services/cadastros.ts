@@ -1,5 +1,7 @@
 // Validação dos cadastros, compartilhada entre o painel e a API de integração.
 import { z } from "zod";
+import { prisma } from "../db.js";
+import { naoEncontrado } from "../lib/erros.js";
 
 const hora = z.string().regex(/^\d{2}:\d{2}$/, "Use o formato HH:mm");
 const intervalo = z.tuple([hora, hora]);
@@ -42,11 +44,31 @@ export const esquemaFuncionario = z.object({
   exigeGps: z.boolean().optional(),
   exigeFacial: z.boolean().optional(),
   jornadaId: z.string().optional().nullable(),
+  departamentoId: z.string().optional().nullable(),
+  filialId: z.string().optional().nullable(),
   codigoExterno: z.string().optional().nullable(),
 });
 
 export function dadosFuncionario(d: z.infer<typeof esquemaFuncionario>) {
   return { ...d, admissao: d.admissao ? new Date(d.admissao + "T12:00:00Z") : d.admissao };
+}
+
+/**
+ * Confere se jornada, departamento e filial informados são da mesma empresa.
+ * Sem filial informada, o funcionário herda a filial do departamento.
+ */
+export async function validarReferencias(empresaId: string, d: z.infer<typeof esquemaFuncionario>) {
+  const doc = (achou: unknown, nome: string) => {
+    if (!achou) throw naoEncontrado(nome);
+  };
+  if (d.jornadaId) doc(await prisma.jornada.findFirst({ where: { id: d.jornadaId, empresaId } }), "Jornada");
+  if (d.filialId) doc(await prisma.filial.findFirst({ where: { id: d.filialId, empresaId } }), "Filial");
+  if (d.departamentoId) {
+    const dep = await prisma.departamento.findFirst({ where: { id: d.departamentoId, empresaId } });
+    doc(dep, "Departamento");
+    if (!d.filialId && dep!.filialId) d.filialId = dep!.filialId;
+  }
+  return d;
 }
 
 export const esquemaPeriodo = z.object({ inicio: data, fim: data }).refine((p) => p.inicio <= p.fim, "Período inválido");

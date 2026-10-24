@@ -5,6 +5,9 @@ import { autenticar, gerarToken, type Papel } from "../auth.js";
 import { prisma } from "../db.js";
 import { ErroHttp } from "../lib/erros.js";
 import { FACIAL_ATIVO } from "../lib/face.js";
+import { DIAS_TESTE, motivoBloqueio } from "../lib/planos.js";
+import { consultarLink, pedirRedefinicao, usarLink } from "../services/acesso.js";
+import { ehSuperadmin } from "../services/conta.js";
 import { rota, sessao } from "./util.js";
 
 export const rotasAuth = Router();
@@ -32,6 +35,7 @@ rotasAuth.post(
       data: {
         razaoSocial: d.razaoSocial,
         cnpj: d.cnpj,
+        trialAte: new Date(Date.now() + DIAS_TESTE * 86400_000),
         jornadas: {
           create: {
             nome: "Comercial 44h (seg-sex 8h48)",
@@ -66,7 +70,7 @@ rotasAuth.post(
     const { email, senha } = z.object({ email: z.string().toLowerCase(), senha: z.string() }).parse(req.body);
     const u = await prisma.usuario.findUnique({ where: { email }, include: { funcionario: true } });
     if (!u || !(await bcrypt.compare(senha, u.senhaHash))) throw new ErroHttp(401, "E-mail ou senha incorretos");
-    if (u.funcionario && !u.funcionario.ativo) throw new ErroHttp(403, "Usuário desativado");
+    if (!u.ativo || (u.funcionario && !u.funcionario.ativo)) throw new ErroHttp(403, "Usuário desativado");
     res.json({
       token: gerarToken({
         usuarioId: u.id,
@@ -79,6 +83,39 @@ rotasAuth.post(
   }),
 );
 
+// ---------- Esqueci minha senha / convite de primeiro acesso ----------
+
+rotasAuth.post(
+  "/esqueci",
+  rota(async (req, res) => {
+    const { email } = z.object({ email: z.string().email("E-mail inválido").toLowerCase() }).parse(req.body);
+    await pedirRedefinicao(email);
+    res.json({ ok: true });
+  }),
+);
+
+rotasAuth.get(
+  "/link/:token",
+  rota(async (req, res) => {
+    res.json(await consultarLink(req.params.token));
+  }),
+);
+
+rotasAuth.post(
+  "/redefinir",
+  rota(async (req, res) => {
+    const { token, senha } = z
+      .object({ token: z.string(), senha: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres") })
+      .parse(req.body);
+    const u = await usarLink(token, senha);
+    // Já entra logado depois de criar a senha
+    res.json({
+      token: gerarToken({ usuarioId: u.id, empresaId: u.empresaId, papel: u.papel as Papel, funcionarioId: u.funcionarioId }),
+      papel: u.papel,
+    });
+  }),
+);
+
 rotasAuth.get(
   "/eu",
   autenticar,
@@ -86,14 +123,22 @@ rotasAuth.get(
     const u = await prisma.usuario.findUnique({
       where: { id: sessao(req).usuarioId },
       select: {
+        id: true,
         nome: true,
         email: true,
         papel: true,
         funcionarioId: true,
-        empresa: { select: { razaoSocial: true, cnpj: true, plano: true } },
+        empresa: { select: { razaoSocial: true, cnpj: true, plano: true, trialAte: true, bloqueada: true } },
       },
     });
-    res.json({ ...u, recursos: { facial: FACIAL_ATIVO } });
+    if (!u) throw new ErroHttp(401, "Faça login");
+    // Aviso no topo do painel: teste acabando, vencido ou acesso suspenso
+    let aviso = motivoBloqueio(u.empresa);
+    const diasTeste = u.empresa.trialAte ? Math.ceil((u.empresa.trialAte.getTime() - Date.now()) / 86400_000) : null;
+    if (!aviso && u.empresa.plano === "TRIAL" && diasTeste !== null && diasTeste <= 3) {
+      aviso = `O período de teste termina em ${diasTeste} dia(s). Fale com a gente para contratar um plano.`;
+    }
+    res.json({ ...u, aviso, superadmin: ehSuperadmin(u.email), recursos: { facial: FACIAL_ATIVO } });
   }),
 );
 

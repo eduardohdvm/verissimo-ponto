@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { prisma } from "../db.js";
 
-export type EventoWebhook = "marcacao.criada" | "tratamento.decidido" | "funcionario.alterado";
+export type EventoWebhook = "marcacao.criada" | "tratamento.decidido" | "funcionario.alterado" | "fechamento.concluido";
 
 /**
  * Envia o evento para os webhooks da empresa. Não bloqueia a requisição de origem.

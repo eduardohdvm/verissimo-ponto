@@ -1,36 +1,33 @@
+// Rotas do RH ligadas ao dia a dia do ponto: painel, funcionários, marcações, ajustes e espelho.
+// ADMIN vê a empresa toda; GESTOR só os funcionários dos departamentos dele (services/escopo.ts).
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
-import { autenticar, exigirPapel, hashApiKey } from "../auth.js";
+import { autenticar, exigirPapel } from "../auth.js";
 import { prisma } from "../db.js";
 import { ErroHttp, naoEncontrado } from "../lib/erros.js";
+import { limiteFuncionarios } from "../lib/planos.js";
 import { partesLocais, somarDias, utcDeLocal } from "../lib/tempo.js";
-import { gerarAfd } from "../services/afd.js";
-import { dadosFuncionario, esquemaFuncionario, esquemaJornada, esquemaPeriodo } from "../services/cadastros.js";
-import { gerarEspelho } from "../services/espelho.js";
+import { enviarConvite } from "../services/acesso.js";
+import { dadosFuncionario, esquemaFuncionario, esquemaPeriodo, validarReferencias } from "../services/cadastros.js";
+import { filtroFuncionarios, funcionarioNoEscopo } from "../services/escopo.js";
+import { gerarEspelho, periodoDoMes } from "../services/espelho.js";
+import { indicadoresDoMes, trabalhandoAgora } from "../services/indicadores.js";
 import { cadastrarRosto } from "../services/facial.js";
+import { garantirPeriodoAberto } from "../services/fechamentos.js";
 import { PASTA_UPLOADS } from "../services/marcacoes.js";
+import { notificarFuncionarios } from "../services/notificacoes.js";
+import { criarTratamento } from "../services/tratamentos.js";
 import { dispararWebhook } from "../services/webhooks.js";
 import { rota, sessao } from "./util.js";
 
 export const rotasAdmin = Router();
 rotasAdmin.use(autenticar, exigirPapel("ADMIN", "GESTOR"));
-const soAdmin = exigirPapel("ADMIN");
+export const soAdmin = exigirPapel("ADMIN");
 
 const eid = (req: Parameters<typeof sessao>[0]) => sessao(req).empresaId;
-
-async function garantirDaEmpresa(modelo: "funcionario" | "jornada" | "localPermitido", id: string, empresaId: string) {
-  const where = { id, empresaId };
-  const r =
-    modelo === "funcionario"
-      ? await prisma.funcionario.findFirst({ where })
-      : modelo === "jornada"
-        ? await prisma.jornada.findFirst({ where })
-        : await prisma.localPermitido.findFirst({ where });
-  if (!r) throw naoEncontrado();
-}
 
 // ---------- Painel ----------
 
@@ -38,17 +35,21 @@ rotasAdmin.get(
   "/painel",
   rota(async (req, res) => {
     const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: eid(req) } });
+    const escopo = await filtroFuncionarios(sessao(req));
     const hoje = partesLocais(new Date(), emp.fusoHorario).data;
     const inicioHoje = utcDeLocal(hoje, "00:00", emp.fusoHorario);
-    const [ativos, marcacoesHoje, pendentes, recusadasHoje] = await Promise.all([
-      prisma.funcionario.count({ where: { empresaId: emp.id, ativo: true } }),
+    const [ativos, marcacoesHoje, pendentes, recusadasHoje, afastamentosPendentes] = await Promise.all([
+      prisma.funcionario.count({ where: { ...escopo, ativo: true } }),
       prisma.marcacao.findMany({
-        where: { empresaId: emp.id, dataHora: { gte: utcDeLocal(hoje, "00:00", emp.fusoHorario) } },
+        where: { empresaId: emp.id, funcionario: escopo, dataHora: { gte: inicioHoje } },
         include: { funcionario: { select: { nome: true } } },
         orderBy: { dataHora: "desc" },
       }),
-      prisma.tratamento.count({ where: { empresaId: emp.id, status: "PENDENTE" } }),
-      prisma.tentativaRecusada.count({ where: { empresaId: emp.id, criadoEm: { gte: inicioHoje } } }),
+      prisma.tratamento.count({ where: { empresaId: emp.id, funcionario: escopo, status: "PENDENTE" } }),
+      prisma.tentativaRecusada.count({
+        where: { empresaId: emp.id, ...(sessao(req).papel === "ADMIN" ? {} : { funcionario: escopo }), criadoEm: { gte: inicioHoje } },
+      }),
+      prisma.afastamento.count({ where: { empresaId: emp.id, funcionario: escopo, status: "PENDENTE" } }),
     ]);
     const presentes = new Set(marcacoesHoje.map((m) => m.funcionarioId));
     res.json({
@@ -56,6 +57,7 @@ rotasAdmin.get(
       funcionariosAtivos: ativos,
       presentesHoje: presentes.size,
       tratamentosPendentes: pendentes,
+      afastamentosPendentes,
       tentativasRecusadasHoje: recusadasHoje,
       ultimasMarcacoes: marcacoesHoje.slice(0, 30).map((m) => ({
         id: m.id,
@@ -77,104 +79,162 @@ rotasAdmin.get(
   "/funcionarios",
   rota(async (req, res) => {
     const lista = await prisma.funcionario.findMany({
-      where: { empresaId: eid(req) },
-      include: { jornada: { select: { nome: true } }, usuario: { select: { email: true } } },
+      where: await filtroFuncionarios(sessao(req)),
+      include: {
+        jornada: { select: { nome: true } },
+        departamento: { select: { nome: true } },
+        filial: { select: { nome: true } },
+        usuario: { select: { email: true } },
+      },
       orderBy: { nome: "asc" },
     });
-    res.json(lista.map(({ descritorFacial, fotoCadastro, ...f }) => ({ ...f, rostoCadastrado: !!descritorFacial })));
+    res.json(
+      lista.map(({ descritorFacial, fotoCadastro, pinHash, ...f }) => ({
+        ...f,
+        rostoCadastrado: !!descritorFacial,
+        temPin: !!pinHash,
+      })),
+    );
   }),
 );
 
-const esquemaAcesso = z.object({ email: z.string().email().toLowerCase(), senha: z.string().min(8) }).optional();
+// Acesso ao app: com senha definida pelo RH, ou por convite (o funcionário cria a senha pelo link)
+const esquemaAcesso = z
+  .object({
+    email: z.string().email("E-mail de login inválido").toLowerCase(),
+    senha: z.string().min(8, "A senha precisa ter pelo menos 8 caracteres").optional(),
+    convite: z.boolean().optional(),
+  })
+  .optional();
+
+async function salvarAcesso(empresaId: string, f: { id: string; nome: string }, acesso: z.infer<typeof esquemaAcesso>) {
+  if (!acesso) return null;
+  const dono = await prisma.usuario.findUnique({ where: { email: acesso.email } });
+  const existente = await prisma.usuario.findUnique({ where: { funcionarioId: f.id } });
+  if (dono && dono.id !== existente?.id) throw new ErroHttp(409, "Este e-mail já é usado por outro login");
+  // Sem senha, cria com uma senha aleatória que ninguém sabe: o acesso só vale depois do convite
+  const senhaHash = await bcrypt.hash(acesso.senha ?? randomBytes(24).toString("hex"), 10);
+  const u = existente
+    ? await prisma.usuario.update({
+        where: { id: existente.id },
+        data: { email: acesso.email, nome: f.nome, ...(acesso.senha ? { senhaHash } : {}) },
+      })
+    : await prisma.usuario.create({
+        data: { empresaId, nome: f.nome, email: acesso.email, senhaHash, papel: "FUNCIONARIO", funcionarioId: f.id },
+      });
+  return acesso.convite || (!existente && !acesso.senha) ? enviarConvite(u.id) : null;
+}
 
 rotasAdmin.post(
   "/funcionarios",
+  soAdmin,
   rota(async (req, res) => {
-    const d = esquemaFuncionario.parse(req.body);
+    const d = await validarReferencias(eid(req), esquemaFuncionario.parse(req.body));
     const acesso = esquemaAcesso.parse(req.body.acesso);
-    if (d.jornadaId) await garantirDaEmpresa("jornada", d.jornadaId, eid(req));
     if (acesso && (await prisma.usuario.findUnique({ where: { email: acesso.email } }))) {
-      throw new ErroHttp(409, "E-mail já em uso");
+      throw new ErroHttp(409, "Este e-mail já é usado por outro login");
     }
+    await verificarLimitePlano(eid(req));
     const f = await prisma.funcionario.create({ data: { ...dadosFuncionario(d), empresaId: eid(req) } });
-    if (acesso) {
-      await prisma.usuario.create({
-        data: {
-          empresaId: eid(req),
-          nome: f.nome,
-          email: acesso.email,
-          senhaHash: await bcrypt.hash(acesso.senha, 10),
-          papel: "FUNCIONARIO",
-          funcionarioId: f.id,
-        },
-      });
-    }
+    const linkConvite = await salvarAcesso(eid(req), f, acesso);
     dispararWebhook(eid(req), "funcionario.alterado", f);
-    res.status(201).json(f);
+    res.status(201).json({ ...f, linkConvite });
   }),
 );
 
 rotasAdmin.put(
   "/funcionarios/:id",
+  soAdmin,
   rota(async (req, res) => {
-    await garantirDaEmpresa("funcionario", req.params.id, eid(req));
-    const d = esquemaFuncionario.parse(req.body);
-    if (d.jornadaId) await garantirDaEmpresa("jornada", d.jornadaId, eid(req));
-    const f = await prisma.funcionario.update({ where: { id: req.params.id }, data: dadosFuncionario(d) });
-    const acesso = esquemaAcesso.parse(req.body.acesso);
-    if (acesso) {
-      const existente = await prisma.usuario.findUnique({ where: { funcionarioId: f.id } });
-      const senhaHash = await bcrypt.hash(acesso.senha, 10);
-      if (existente) await prisma.usuario.update({ where: { id: existente.id }, data: { email: acesso.email, senhaHash } });
-      else
-        await prisma.usuario.create({
-          data: { empresaId: eid(req), nome: f.nome, email: acesso.email, senhaHash, papel: "FUNCIONARIO", funcionarioId: f.id },
-        });
-    }
+    const atual = await funcionarioNoEscopo(sessao(req), req.params.id);
+    const d = await validarReferencias(eid(req), esquemaFuncionario.parse(req.body));
+    if (d.ativo && !atual.ativo) await verificarLimitePlano(eid(req));
+    const f = await prisma.funcionario.update({ where: { id: atual.id }, data: dadosFuncionario(d) });
+    const linkConvite = await salvarAcesso(eid(req), f, esquemaAcesso.parse(req.body.acesso));
     dispararWebhook(eid(req), "funcionario.alterado", f);
-    res.json(f);
+    res.json({ ...f, linkConvite });
   }),
 );
+
+// Reenvia o convite de primeiro acesso; devolve o link para o RH mandar também pelo WhatsApp
+rotasAdmin.post(
+  "/funcionarios/:id/convite",
+  soAdmin,
+  rota(async (req, res) => {
+    const f = await funcionarioNoEscopo(sessao(req), req.params.id);
+    const u = await prisma.usuario.findUnique({ where: { funcionarioId: f.id } });
+    if (!u) throw new ErroHttp(400, "Cadastre um e-mail de login para este funcionário");
+    res.json({ link: await enviarConvite(u.id) });
+  }),
+);
+
+// PIN do modo quiosque (4 a 6 dígitos)
+rotasAdmin.put(
+  "/funcionarios/:id/pin",
+  soAdmin,
+  rota(async (req, res) => {
+    const f = await funcionarioNoEscopo(sessao(req), req.params.id);
+    const { pin } = z.object({ pin: z.string().regex(/^\d{4,6}$/, "O PIN deve ter de 4 a 6 números").nullable() }).parse(req.body);
+    await prisma.funcionario.update({ where: { id: f.id }, data: { pinHash: pin ? await bcrypt.hash(pin, 10) : null } });
+    res.json({ ok: true });
+  }),
+);
+
+async function verificarLimitePlano(empresaId: string) {
+  const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+  const limite = limiteFuncionarios(emp.plano);
+  const ativos = await prisma.funcionario.count({ where: { empresaId, ativo: true } });
+  if (limite !== null && ativos >= limite) {
+    throw new ErroHttp(402, `O plano atual permite até ${limite} funcionários ativos. Fale com a gente para mudar de plano.`);
+  }
+}
 
 // ---------- Rosto de referência (reconhecimento facial) ----------
 
 rotasAdmin.post(
   "/funcionarios/:id/rosto",
+  soAdmin,
   rota(async (req, res) => {
-    await garantirDaEmpresa("funcionario", req.params.id, eid(req));
+    const f = await funcionarioNoEscopo(sessao(req), req.params.id);
     const { imagem } = z.object({ imagem: z.string().min(100) }).parse(req.body);
-    res.json(await cadastrarRosto(eid(req), req.params.id, imagem));
+    res.json(await cadastrarRosto(eid(req), f.id, imagem));
   }),
 );
 
 rotasAdmin.get(
   "/funcionarios/:id/rosto",
   rota(async (req, res) => {
-    const f = await prisma.funcionario.findFirst({ where: { id: req.params.id, empresaId: eid(req) } });
-    if (!f?.fotoCadastro) throw naoEncontrado("Foto de cadastro");
+    const f = await funcionarioNoEscopo(sessao(req), req.params.id);
+    if (!f.fotoCadastro) throw naoEncontrado("Foto de cadastro");
     res.sendFile(path.join(PASTA_UPLOADS, f.fotoCadastro));
   }),
 );
 
 rotasAdmin.delete(
   "/funcionarios/:id/rosto",
+  soAdmin,
   rota(async (req, res) => {
-    await garantirDaEmpresa("funcionario", req.params.id, eid(req));
+    const f = await funcionarioNoEscopo(sessao(req), req.params.id);
     await prisma.funcionario.update({
-      where: { id: req.params.id },
+      where: { id: f.id },
       data: { fotoCadastro: null, descritorFacial: null, facialCadastradoEm: null },
     });
     res.json({ ok: true });
   }),
 );
 
-// Tentativas recusadas pelo reconhecimento facial
+// Tentativas recusadas pelo reconhecimento facial. O ADMIN vê também as de pessoas
+// não reconhecidas no quiosque (sem funcionário); o gestor, só as da equipe dele.
+async function filtroTentativas(req: Parameters<typeof sessao>[0]) {
+  return sessao(req).papel === "ADMIN" ? {} : { funcionario: await filtroFuncionarios(sessao(req)) };
+}
+
 rotasAdmin.get(
   "/tentativas",
   rota(async (req, res) => {
     const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: eid(req) } });
     const lista = await prisma.tentativaRecusada.findMany({
-      where: { empresaId: emp.id, criadoEm: { gte: new Date(Date.now() - 7 * 86400_000) } },
+      where: { empresaId: emp.id, ...(await filtroTentativas(req)), criadoEm: { gte: new Date(Date.now() - 7 * 86400_000) } },
       include: { funcionario: { select: { nome: true } } },
       orderBy: { criadoEm: "desc" },
       take: 100,
@@ -182,7 +242,7 @@ rotasAdmin.get(
     res.json(
       lista.map((t) => ({
         id: t.id,
-        funcionario: t.funcionario.nome,
+        funcionario: t.funcionario?.nome ?? "Não identificado (quiosque)",
         motivo: t.motivo,
         distanciaFacial: t.distanciaFacial,
         temFoto: !!t.foto,
@@ -196,110 +256,11 @@ rotasAdmin.get(
 rotasAdmin.get(
   "/tentativas/:id/foto",
   rota(async (req, res) => {
-    const t = await prisma.tentativaRecusada.findFirst({ where: { id: req.params.id, empresaId: eid(req) } });
+    const t = await prisma.tentativaRecusada.findFirst({
+      where: { id: req.params.id, empresaId: eid(req), ...(await filtroTentativas(req)) },
+    });
     if (!t?.foto) throw naoEncontrado("Foto");
     res.sendFile(path.join(PASTA_UPLOADS, t.foto));
-  }),
-);
-
-// ---------- Jornadas ----------
-
-rotasAdmin.get(
-  "/jornadas",
-  rota(async (req, res) => {
-    const lista = await prisma.jornada.findMany({ where: { empresaId: eid(req) }, orderBy: { nome: "asc" } });
-    res.json(lista.map((j) => ({ ...j, config: JSON.parse(j.horarios), horarios: undefined })));
-  }),
-);
-
-rotasAdmin.post(
-  "/jornadas",
-  soAdmin,
-  rota(async (req, res) => {
-    const d = esquemaJornada.parse(req.body);
-    const j = await prisma.jornada.create({
-      data: { empresaId: eid(req), nome: d.nome, toleranciaMin: d.toleranciaMin, horarios: JSON.stringify(d.config) },
-    });
-    res.status(201).json(j);
-  }),
-);
-
-rotasAdmin.put(
-  "/jornadas/:id",
-  soAdmin,
-  rota(async (req, res) => {
-    await garantirDaEmpresa("jornada", req.params.id, eid(req));
-    const d = esquemaJornada.parse(req.body);
-    const j = await prisma.jornada.update({
-      where: { id: req.params.id },
-      data: { nome: d.nome, toleranciaMin: d.toleranciaMin, horarios: JSON.stringify(d.config) },
-    });
-    res.json(j);
-  }),
-);
-
-// ---------- Locais permitidos (cerca virtual) ----------
-
-const esquemaLocal = z.object({
-  nome: z.string().min(1),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  raioMetros: z.number().int().min(20).max(5000),
-});
-
-rotasAdmin.get(
-  "/locais",
-  rota(async (req, res) => res.json(await prisma.localPermitido.findMany({ where: { empresaId: eid(req) } }))),
-);
-
-rotasAdmin.post(
-  "/locais",
-  soAdmin,
-  rota(async (req, res) => {
-    const l = await prisma.localPermitido.create({ data: { ...esquemaLocal.parse(req.body), empresaId: eid(req) } });
-    res.status(201).json(l);
-  }),
-);
-
-rotasAdmin.delete(
-  "/locais/:id",
-  soAdmin,
-  rota(async (req, res) => {
-    await garantirDaEmpresa("localPermitido", req.params.id, eid(req));
-    await prisma.localPermitido.delete({ where: { id: req.params.id } });
-    res.json({ ok: true });
-  }),
-);
-
-// ---------- Feriados ----------
-
-rotasAdmin.get(
-  "/feriados",
-  rota(async (req, res) =>
-    res.json(await prisma.feriado.findMany({ where: { empresaId: eid(req) }, orderBy: { data: "asc" } })),
-  ),
-);
-
-rotasAdmin.post(
-  "/feriados",
-  soAdmin,
-  rota(async (req, res) => {
-    const d = z.object({ data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), descricao: z.string().min(1) }).parse(req.body);
-    const f = await prisma.feriado.upsert({
-      where: { empresaId_data: { empresaId: eid(req), data: d.data } },
-      create: { ...d, empresaId: eid(req) },
-      update: { descricao: d.descricao },
-    });
-    res.status(201).json(f);
-  }),
-);
-
-rotasAdmin.delete(
-  "/feriados/:id",
-  soAdmin,
-  rota(async (req, res) => {
-    await prisma.feriado.deleteMany({ where: { id: req.params.id, empresaId: eid(req) } });
-    res.json({ ok: true });
   }),
 );
 
@@ -309,6 +270,7 @@ rotasAdmin.get(
   "/marcacoes",
   rota(async (req, res) => {
     const { funcionarioId, data } = z.object({ funcionarioId: z.string(), data: z.string() }).parse(req.query);
+    await funcionarioNoEscopo(sessao(req), funcionarioId);
     const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: eid(req) } });
     const lista = await prisma.marcacao.findMany({
       where: {
@@ -343,7 +305,9 @@ rotasAdmin.get(
 rotasAdmin.get(
   "/marcacoes/:id/selfie",
   rota(async (req, res) => {
-    const m = await prisma.marcacao.findFirst({ where: { id: req.params.id, empresaId: eid(req) } });
+    const m = await prisma.marcacao.findFirst({
+      where: { id: req.params.id, empresaId: eid(req), funcionario: await filtroFuncionarios(sessao(req)) },
+    });
     if (!m?.selfie) throw naoEncontrado("Foto");
     res.sendFile(path.join(PASTA_UPLOADS, m.selfie));
   }),
@@ -357,7 +321,7 @@ rotasAdmin.get(
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: eid(req) } });
     const lista = await prisma.tratamento.findMany({
-      where: { empresaId: emp.id, ...(status ? { status } : {}) },
+      where: { empresaId: emp.id, funcionario: await filtroFuncionarios(sessao(req)), ...(status ? { status } : {}) },
       include: { funcionario: { select: { nome: true } }, marcacao: { select: { dataHora: true, nsr: true } } },
       orderBy: { criadoEm: "desc" },
       take: 200,
@@ -372,51 +336,11 @@ rotasAdmin.get(
   }),
 );
 
-export const esquemaTratamento = z
-  .object({
-    tipo: z.enum(["INCLUSAO", "DESCONSIDERAR", "ABONO"]),
-    data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    hora: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-    marcacaoId: z.string().optional(),
-    motivo: z.string().min(3, "Informe o motivo"),
-  })
-  .refine((t) => t.tipo !== "INCLUSAO" || t.hora, "Informe o horário a incluir")
-  .refine((t) => t.tipo !== "DESCONSIDERAR" || t.marcacaoId, "Informe a marcação a desconsiderar");
-
-/** Cria um tratamento; usado pelo gestor (já aprovado) e pelo funcionário (pendente). */
-export async function criarTratamento(
-  empresaId: string,
-  funcionarioId: string,
-  usuarioId: string,
-  corpo: unknown,
-  aprovado: boolean,
-) {
-  const t = esquemaTratamento.parse(corpo);
-  const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
-  if (t.marcacaoId) {
-    const m = await prisma.marcacao.findFirst({ where: { id: t.marcacaoId, funcionarioId, empresaId } });
-    if (!m) throw naoEncontrado("Marcação");
-  }
-  return prisma.tratamento.create({
-    data: {
-      empresaId,
-      funcionarioId,
-      tipo: t.tipo,
-      data: t.data,
-      dataHora: t.tipo === "INCLUSAO" ? utcDeLocal(t.data, t.hora!, emp.fusoHorario) : null,
-      marcacaoId: t.tipo === "DESCONSIDERAR" ? t.marcacaoId : null,
-      motivo: t.motivo,
-      solicitadoPor: usuarioId,
-      ...(aprovado ? { status: "APROVADO", decididoPor: usuarioId, decididoEm: new Date() } : {}),
-    },
-  });
-}
-
 rotasAdmin.post(
   "/funcionarios/:id/tratamentos",
   rota(async (req, res) => {
-    await garantirDaEmpresa("funcionario", req.params.id, eid(req));
-    const t = await criarTratamento(eid(req), req.params.id, sessao(req).usuarioId, req.body, true);
+    const f = await funcionarioNoEscopo(sessao(req), req.params.id);
+    const t = await criarTratamento(eid(req), f.id, sessao(req).usuarioId, req.body, true);
     res.status(201).json(t);
   }),
 );
@@ -425,101 +349,139 @@ rotasAdmin.post(
   "/tratamentos/:id/decisao",
   rota(async (req, res) => {
     const { aprovar } = z.object({ aprovar: z.boolean() }).parse(req.body);
-    const t = await prisma.tratamento.findFirst({ where: { id: req.params.id, empresaId: eid(req), status: "PENDENTE" } });
+    const t = await prisma.tratamento.findFirst({
+      where: { id: req.params.id, empresaId: eid(req), status: "PENDENTE", funcionario: await filtroFuncionarios(sessao(req)) },
+    });
     if (!t) throw naoEncontrado("Solicitação pendente");
+    if (aprovar) await garantirPeriodoAberto(eid(req), t.data);
     const atualizado = await prisma.tratamento.update({
       where: { id: t.id },
       data: { status: aprovar ? "APROVADO" : "REJEITADO", decididoPor: sessao(req).usuarioId, decididoEm: new Date() },
     });
     dispararWebhook(eid(req), "tratamento.decidido", atualizado);
+    notificarFuncionarios(eid(req), [t.funcionarioId], aprovar ? "Ajuste aprovado" : "Ajuste recusado",
+      `Seu pedido de ajuste do dia ${t.data.split("-").reverse().join("/")} foi ${aprovar ? "aprovado" : "recusado"}.`, "/ponto#ajuste");
     res.json(atualizado);
   }),
 );
 
-// ---------- Espelho de ponto e AFD ----------
+// ---------- Espelho de ponto ----------
 
 rotasAdmin.get(
   "/espelho/:funcionarioId",
   rota(async (req, res) => {
     const p = esquemaPeriodo.parse(req.query);
-    res.json(await gerarEspelho(eid(req), req.params.funcionarioId, p.inicio, p.fim));
+    const f = await funcionarioNoEscopo(sessao(req), req.params.funcionarioId);
+    res.json(await gerarEspelho(eid(req), f.id, p.inicio, p.fim));
   }),
 );
 
+// ---------- Indicadores ----------
+
 rotasAdmin.get(
-  "/afd",
+  "/indicadores",
+  rota(async (req, res) => {
+    const { mes } = z.object({ mes: z.string().regex(/^\d{4}-\d{2}$/) }).parse(req.query);
+    const p = periodoDoMes(mes);
+    const [indicadores, agora] = await Promise.all([indicadoresDoMes(sessao(req), p.inicio, p.fim), trabalhandoAgora(sessao(req))]);
+    res.json({ periodo: p, ...indicadores, agora });
+  }),
+);
+
+// ---------- Primeiros passos e importação de planilha ----------
+
+rotasAdmin.get(
+  "/primeiros-passos",
   soAdmin,
   rota(async (req, res) => {
-    const p = esquemaPeriodo.parse(req.query);
-    const conteudo = await gerarAfd(eid(req), p.inicio, p.fim);
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="AFD_${p.inicio}_${p.fim}.txt"`);
-    res.send(conteudo);
+    const empresaId = eid(req);
+    const [funcionarios, comJornada, comAcesso, feriados, locais, departamentos] = await Promise.all([
+      prisma.funcionario.count({ where: { empresaId } }),
+      prisma.funcionario.count({ where: { empresaId, jornadaId: { not: null } } }),
+      prisma.usuario.count({ where: { empresaId, papel: "FUNCIONARIO" } }),
+      prisma.feriado.count({ where: { empresaId } }),
+      prisma.localPermitido.count({ where: { empresaId } }),
+      prisma.departamento.count({ where: { empresaId } }),
+    ]);
+    res.json({ funcionarios, comJornada, comAcesso, feriados, locais, departamentos });
   }),
 );
 
-// ---------- Integrações: chaves de API e webhooks ----------
-
-rotasAdmin.get(
-  "/api-keys",
-  soAdmin,
-  rota(async (req, res) =>
-    res.json(
-      await prisma.apiKey.findMany({
-        where: { empresaId: eid(req) },
-        select: { id: true, nome: true, prefixo: true, criadoEm: true, ultimoUso: true, revogadaEm: true },
-        orderBy: { criadoEm: "desc" },
-      }),
-    ),
-  ),
-);
+const esquemaLinhaImportacao = z.object({
+  nome: z.string().trim().min(2, "nome obrigatório"),
+  cpf: z.string(),
+  matricula: z.string().trim().optional().nullable(),
+  pis: z.string().trim().optional().nullable(),
+  cargo: z.string().trim().optional().nullable(),
+  admissao: z.string().trim().optional().nullable(), // DD/MM/AAAA ou AAAA-MM-DD
+  email: z.string().trim().toLowerCase().optional().nullable(),
+  departamento: z.string().trim().optional().nullable(),
+  jornada: z.string().trim().optional().nullable(),
+});
 
 rotasAdmin.post(
-  "/api-keys",
+  "/funcionarios/importar",
   soAdmin,
   rota(async (req, res) => {
-    const { nome } = z.object({ nome: z.string().min(1) }).parse(req.body);
-    const chave = "pk_" + randomBytes(24).toString("hex");
-    await prisma.apiKey.create({
-      data: { empresaId: eid(req), nome, prefixo: chave.slice(0, 10), hash: hashApiKey(chave) },
-    });
-    // A chave completa só é mostrada agora; no banco fica apenas o hash
-    res.status(201).json({ chave });
-  }),
-);
+    const empresaId = eid(req);
+    const { linhas, convites } = z
+      .object({ linhas: z.array(z.record(z.string(), z.unknown())).min(1).max(2000), convites: z.boolean().default(false) })
+      .parse(req.body);
+    const jornadas = await prisma.jornada.findMany({ where: { empresaId } });
+    const departamentos = new Map(
+      (await prisma.departamento.findMany({ where: { empresaId } })).map((d) => [d.nome.toLowerCase(), d.id]),
+    );
+    const emp = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+    const limite = limiteFuncionarios(emp.plano);
+    let ativos = await prisma.funcionario.count({ where: { empresaId, ativo: true } });
 
-rotasAdmin.delete(
-  "/api-keys/:id",
-  soAdmin,
-  rota(async (req, res) => {
-    await prisma.apiKey.updateMany({ where: { id: req.params.id, empresaId: eid(req) }, data: { revogadaEm: new Date() } });
-    res.json({ ok: true });
-  }),
-);
-
-rotasAdmin.get(
-  "/webhooks",
-  soAdmin,
-  rota(async (req, res) => res.json(await prisma.webhook.findMany({ where: { empresaId: eid(req) } }))),
-);
-
-rotasAdmin.post(
-  "/webhooks",
-  soAdmin,
-  rota(async (req, res) => {
-    const d = z.object({ url: z.string().url(), eventos: z.array(z.string()).min(1) }).parse(req.body);
-    const w = await prisma.webhook.create({
-      data: { empresaId: eid(req), url: d.url, eventos: d.eventos.join(","), segredo: "whsec_" + randomBytes(20).toString("hex") },
-    });
-    res.status(201).json(w);
-  }),
-);
-
-rotasAdmin.delete(
-  "/webhooks/:id",
-  soAdmin,
-  rota(async (req, res) => {
-    await prisma.webhook.deleteMany({ where: { id: req.params.id, empresaId: eid(req) } });
-    res.json({ ok: true });
+    const relatorio = { criados: 0, atualizados: 0, erros: [] as { linha: number; erro: string }[], convites: [] as { nome: string; link: string }[] };
+    for (const [i, bruta] of linhas.entries()) {
+      const n = i + 2; // linha 1 da planilha é o cabeçalho
+      try {
+        const l = esquemaLinhaImportacao.parse(bruta);
+        let admissao = l.admissao || null;
+        if (admissao && /^\d{2}\/\d{2}\/\d{4}$/.test(admissao)) admissao = admissao.split("/").reverse().join("-");
+        let departamentoId: string | null = null;
+        if (l.departamento) {
+          departamentoId = departamentos.get(l.departamento.toLowerCase()) ?? null;
+          if (!departamentoId) {
+            const novo = await prisma.departamento.create({ data: { empresaId, nome: l.departamento } });
+            departamentos.set(l.departamento.toLowerCase(), novo.id);
+            departamentoId = novo.id;
+          }
+        }
+        const jornada = l.jornada ? jornadas.find((j) => j.nome.toLowerCase() === l.jornada!.toLowerCase()) : null;
+        if (l.jornada && !jornada) throw new Error(`jornada "${l.jornada}" não existe`);
+        const cpfLimpo = l.cpf.replace(/\D/g, "");
+        const existente = await prisma.funcionario.findUnique({ where: { empresaId_cpf: { empresaId, cpf: cpfLimpo } } });
+        // Coluna vazia não apaga o que já está no cadastro (undefined = não mexe)
+        const ou = <T>(v: T | null | undefined | "") => (v ? v : undefined);
+        const dados = esquemaFuncionario.parse({
+          nome: l.nome, cpf: l.cpf, matricula: ou(l.matricula), pis: ou(l.pis), cargo: ou(l.cargo),
+          admissao: ou(admissao), departamentoId: ou(departamentoId),
+          // Funcionário novo sem jornada na planilha: usa a única jornada da empresa, se houver só uma
+          jornadaId: jornada?.id ?? (!existente && jornadas.length === 1 ? jornadas[0].id : undefined),
+        });
+        const d = await validarReferencias(empresaId, dados);
+        if (!existente && limite !== null && ativos >= limite) throw new Error(`limite de ${limite} funcionários do plano atingido`);
+        const f = existente
+          ? await prisma.funcionario.update({ where: { id: existente.id }, data: dadosFuncionario(d) })
+          : await prisma.funcionario.create({ data: { ...dadosFuncionario(d), empresaId, exigeGps: true, exigeSelfie: true } });
+        if (existente) relatorio.atualizados++;
+        else {
+          relatorio.criados++;
+          ativos++;
+        }
+        if (l.email) {
+          const link = await salvarAcesso(empresaId, f, { email: l.email, convite: convites });
+          if (link) relatorio.convites.push({ nome: f.nome, link });
+        }
+      } catch (e) {
+        const msg = e instanceof z.ZodError ? e.issues.map((x) => x.message).join("; ") : (e as Error).message;
+        relatorio.erros.push({ linha: n, erro: msg });
+      }
+    }
+    res.json(relatorio);
   }),
 );

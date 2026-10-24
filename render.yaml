@@ -30,6 +30,11 @@ services:
       # Para ligar: plan "standard" (2 GB) e FACIAL_ATIVO = "true".
       - key: FACIAL_ATIVO
         value: "false"
+      # Seu e-mail de login: libera a página /superadmin (empresas clientes, planos, bloqueio)
+      - key: SUPERADMIN_EMAILS
+        sync: false
+      # Opcionais (veja o README): SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_REMETENTE,
+      # CERT_PFX_BASE64, CERT_SENHA, REGISTRO_INPI, CONTATO_VENDAS
     # disk:
     #   name: fotos
     #   mountPath: /var/data

@@ -141,7 +141,8 @@ dialog::backdrop { background: rgb(10 15 25 / 45%); }
   .app { grid-template-columns: 1fr; }
   .lateral { flex-direction: row; overflow-x: auto; padding: 10px 16px; border-right: none; border-bottom: 1px solid var(--border); }
   .lateral a { white-space: nowrap; }
-  .marca, .lateral .rodape { display: none; }
+  .lateral .rodape, .lateral .marca > span, .lateral .marca > svg { display: none; }
+  .lateral .marca { padding: 0; order: 99; }
   .principal { padding: 20px 16px; }
 }
 
@@ -155,3 +156,30 @@ dialog::backdrop { background: rgb(10 15 25 / 45%); }
   .card { border: none; box-shadow: none; padding: 0; }
   body { background: #fff; color: #000; }
 }
+
+/* Botão-link pequeno e sininho de notificações */
+.btn.sm { padding: 5px 10px; font-size: 13px; }
+.marca { position: relative; }
+.sininho { margin-left: auto; padding: 6px; border: none; background: transparent; position: relative; color: var(--muted); }
+.sininho .contador { position: absolute; top: 0; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; line-height: 16px; font-weight: 700; }
+.painel-notificacoes { position: fixed; top: 64px; left: 16px; width: min(360px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; z-index: 20;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / 18%); }
+.notificacao { display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14px; }
+.notificacao:hover { background: var(--surface-2); }
+.notificacao.nova { background: var(--primary-soft); }
+@media (max-width: 860px) { .painel-notificacoes { top: 56px; } }
+
+/* Barras dos indicadores: uma cor (magnitude), valor sempre escrito */
+.barra-ind { display: flex; align-items: center; gap: 8px; min-width: 150px; }
+.barra-ind .trilho { flex: 1; height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.barra-ind .trilho i { display: block; height: 100%; background: var(--primary); border-radius: 0 4px 4px 0; }
+.barra-ind .tnum { min-width: 64px; text-align: right; font-size: 13px; }
+.tabela-ind td { vertical-align: middle; }
+
+/* Primeiros passos */
+.passos { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.passos li { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 10px 40px; border-radius: 8px; background: var(--surface-2); position: relative; }
+.passos li::before { content: ""; position: absolute; left: 12px; top: 12px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); }
+.passos li.feito::before { background: var(--ok); border-color: var(--ok); }
+.passos li.feito strong { text-decoration: line-through; color: var(--muted); }
+.passos a { color: var(--text); text-decoration: none; }

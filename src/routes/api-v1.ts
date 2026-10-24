@@ -4,9 +4,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { autenticarApiKey } from "../auth.js";
 import { prisma } from "../db.js";
-import { naoEncontrado } from "../lib/erros.js";
 import { isoComOffset, somarDias, utcDeLocal } from "../lib/tempo.js";
-import { dadosFuncionario, esquemaFuncionario, esquemaPeriodo } from "../services/cadastros.js";
+import { dadosFuncionario, esquemaFuncionario, esquemaPeriodo, validarReferencias } from "../services/cadastros.js";
 import { gerarEspelho } from "../services/espelho.js";
 import { dispararWebhook } from "../services/webhooks.js";
 import { rota } from "./util.js";
@@ -44,10 +43,9 @@ rotasApiV1.get(
 rotasApiV1.put(
   "/funcionarios/:codigoExterno",
   rota(async (req, res) => {
-    const d = dadosFuncionario(esquemaFuncionario.parse({ ...req.body, codigoExterno: req.params.codigoExterno }));
-    if (d.jornadaId && !(await prisma.jornada.findFirst({ where: { id: d.jornadaId, empresaId: eid(req) } }))) {
-      throw naoEncontrado("Jornada");
-    }
+    const d = dadosFuncionario(
+      await validarReferencias(eid(req), esquemaFuncionario.parse({ ...req.body, codigoExterno: req.params.codigoExterno })),
+    );
     const chave = { empresaId_codigoExterno: { empresaId: eid(req), codigoExterno: req.params.codigoExterno } };
     const existente = await prisma.funcionario.findUnique({ where: chave });
     const f = existente
@@ -119,7 +117,9 @@ rotasApiV1.get(
     const resultado = [];
     for (const f of funcionarios) {
       const e = await gerarEspelho(eid(req), f.id, p.inicio, p.fim);
-      resultado.push({ funcionario: e.funcionario, totais: e.totais, ...(detalhado ? { dias: e.dias } : {}) });
+      // extra50Min/extra100Min mantidos para integrações feitas antes das faixas configuráveis
+      const totais = { ...e.totais, extra50Min: e.totais.extras["50"] ?? 0, extra100Min: e.totais.extras["100"] ?? 0 };
+      resultado.push({ funcionario: e.funcionario, totais, ...(detalhado ? { dias: e.dias } : {}) });
     }
     res.json({ periodo: p, funcionarios: resultado });
   }),

@@ -25,7 +25,10 @@
     .abas button { flex: 1; border: none; background: transparent; padding: 8px; }
     .abas button.ativo { background: var(--surface); box-shadow: var(--shadow); font-weight: 600; }
     .marcas { display: flex; gap: 8px; flex-wrap: wrap; }
-    .marcas .tag { font-size: 15px; padding: 4px 12px; }
+    .marcas .tag { font-size: 15px; padding: 4px 12px; cursor: pointer; border: none; }
+    .resumo-dia { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; font-size: 15px; }
+    .resumo-dia strong { font-variant-numeric: tabular-nums; }
+    .contador-aba { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; line-height: 18px; }
   </style>
 </head>
 <body>
@@ -36,13 +39,15 @@
     </div>
 
     <div class="abas">
-      <button data-aba="bater" class="ativo">Bater ponto</button>
-      <button data-aba="espelho">Meu espelho</button>
-      <button data-aba="ajuste">Pedir ajuste</button>
+      <button data-aba="bater" class="ativo">Ponto</button>
+      <button data-aba="espelho">Espelho</button>
+      <button data-aba="ajuste">Pedidos</button>
+      <button data-aba="assinar">Assinar <span class="contador-aba oculto" id="pendentes"></span></button>
     </div>
 
     <section id="aba-bater" class="stack">
       <div class="relogio"><div class="hora" id="hora">--:--</div><div class="muted" id="data"></div></div>
+      <div class="resumo-dia" id="resumo"></div>
       <div class="camera" id="camera"><span class="muted small">Câmera desligada</span>
         <div class="guia oculto" id="guia"><span></span><div class="barra"><i></i></div></div></div>
       <div class="status" id="status"></div>
@@ -51,7 +56,20 @@
       <div class="card">
         <h3>Marcações de hoje</h3>
         <div class="marcas" id="marcas"><span class="muted">Nenhuma ainda</span></div>
+        <p class="muted small" style="margin:8px 0 0">Toque numa marcação para ver o comprovante.</p>
       </div>
+      <div class="card oculto" id="avisos">
+        <h3>Avisos no celular</h3>
+        <p class="muted small">Receba lembretes para bater o ponto e a resposta dos seus pedidos.</p>
+        <button id="ativar-push">Ativar avisos</button>
+      </div>
+    </section>
+
+    <section id="aba-assinar" class="oculto stack">
+      <div class="card"><h2>Espelhos para assinar</h2>
+        <p class="muted small">No fim de cada mês o RH fecha o período e envia o seu espelho de ponto. Confira os horários e assine,
+          ou conteste se algo estiver errado.</p>
+        <div id="assinaturas"></div></div>
     </section>
 
     <section id="aba-espelho" class="oculto stack">
@@ -62,13 +80,20 @@
     <section id="aba-ajuste" class="oculto stack">
       <form class="card" id="form-ajuste">
         <h2>Pedir ajuste</h2>
-        <p class="muted small">Esqueceu de marcar ou precisa justificar uma ausência? Seu gestor vai analisar.</p>
-        <label>Tipo<select name="tipo"><option value="INCLUSAO">Esqueci de marcar</option><option value="ABONO">Justificar ausência (atestado etc.)</option></select></label>
+        <p class="muted small">Esqueceu de marcar, teve atestado ou precisa justificar uma ausência? Seu gestor vai analisar.</p>
+        <label>O que aconteceu?<select name="tipo">
+          <option value="INCLUSAO">Esqueci de marcar o ponto</option>
+          <option value="ATESTADO">Atestado médico</option>
+          <option value="ABONO">Outra ausência justificada</option>
+        </select></label>
         <div class="grid2">
-          <label>Dia<input name="data" type="date" required></label>
+          <label><span id="rotulo-data">Dia</span><input name="data" type="date" required></label>
           <label id="campo-hora">Horário<input name="hora" type="time"></label>
+          <label id="campo-fim" class="oculto">Até o dia<input name="fim" type="date"></label>
         </div>
-        <label>Motivo<input name="motivo" required></label>
+        <label id="campo-anexo" class="oculto">Foto do atestado<input name="anexo" type="file" accept="image/*,application/pdf" capture="environment"></label>
+        <label>Motivo / observação<input name="motivo" required></label>
+        <p id="erro-ajuste" class="alerta oculto"></p>
         <div class="acoes"><button class="primary">Enviar</button></div>
       </form>
       <div class="card"><h3>Minhas solicitações</h3><div id="minhas"></div></div>

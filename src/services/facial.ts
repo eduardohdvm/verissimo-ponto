@@ -52,22 +52,64 @@ export interface Quadro {
   imagem: string; // JPEG em base64
 }
 
-interface ContextoVerificacao {
+interface ContextoProvaVida {
   empresaId: string;
-  funcionarioId: string;
-  descritorCadastro: string | null;
-  limiar: number;
+  // dono do desafio: o id do funcionário (app) ou "quiosque:<id>" (tablet)
+  donoDesafio: string;
+  funcionarioId: string | null; // para registrar a tentativa recusada; null quando ainda não se sabe quem é
+  quiosqueId?: string;
   desafioId?: string;
   quadros?: Quadro[];
   offline: boolean;
   ip?: string;
 }
 
-/** Valida prova de vida e rosto. Devolve a foto de frente (vira a selfie da marcação). */
+interface ContextoVerificacao extends Omit<ContextoProvaVida, "donoDesafio" | "funcionarioId"> {
+  funcionarioId: string;
+  descritorCadastro: string | null;
+  limiar: number;
+}
+
+/** Valida prova de vida e rosto (1:1, app do funcionário). Devolve a foto de frente (vira a selfie da marcação). */
 export async function verificarRosto(c: ContextoVerificacao): Promise<{ distancia: number; foto: Buffer; provaVida: string }> {
   if (!c.descritorCadastro) {
     throw new ErroHttp(403, "Seu rosto ainda não foi cadastrado. Procure o RH para liberar o ponto.");
   }
+  const p = await provaDeVida({ ...c, donoDesafio: c.funcionarioId });
+  const cadastro = JSON.parse(c.descritorCadastro) as number[];
+  const distFrente = distanciaRostos(p.frente.descritor, cadastro);
+  const distLado = distanciaRostos(p.lado.descritor, cadastro);
+  if (distFrente > c.limiar || distLado > c.limiar + FOLGA_VIRADO) {
+    await p.recusar("Rosto não reconhecido", distFrente);
+  }
+  return { distancia: distFrente, foto: p.foto, provaVida: c.offline ? "OFFLINE" : "SERVIDOR" };
+}
+
+// Diferença mínima entre a pessoa mais parecida e a segunda: evita confundir parentes e sósias no quiosque
+const MARGEM_IDENTIFICACAO = 0.06;
+
+/** Quiosque (1:N): descobre quem é comparando com todos os rostos cadastrados da empresa. */
+export async function identificarRosto(c: Omit<ContextoProvaVida, "donoDesafio" | "funcionarioId" | "offline"> & { quiosqueId: string; limiar: number }) {
+  const p = await provaDeVida({ ...c, donoDesafio: `quiosque:${c.quiosqueId}`, funcionarioId: null, offline: false });
+  const candidatos = await prisma.funcionario.findMany({
+    where: { empresaId: c.empresaId, ativo: true, descritorFacial: { not: null } },
+    select: { id: true, descritorFacial: true },
+  });
+  const ranking = candidatos
+    .map((f) => ({ id: f.id, d: distanciaRostos(p.frente.descritor, JSON.parse(f.descritorFacial!) as number[]) }))
+    .sort((a, b) => a.d - b.d);
+  const [melhor, segundo] = ranking;
+  if (!melhor || melhor.d > c.limiar) await p.recusar("Rosto não reconhecido", melhor?.d);
+  if (segundo && segundo.d - melhor.d < MARGEM_IDENTIFICACAO) {
+    await p.recusar("Não foi possível ter certeza de quem é. Use o PIN ou procure o RH.", melhor.d);
+  }
+  const cadastro = JSON.parse(candidatos.find((f) => f.id === melhor.id)!.descritorFacial!) as number[];
+  if (distanciaRostos(p.lado.descritor, cadastro) > c.limiar + FOLGA_VIRADO) await p.recusar("Rosto não reconhecido", melhor.d);
+  return { funcionarioId: melhor.id, distancia: melhor.d, foto: p.foto, provaVida: "SERVIDOR" };
+}
+
+/** Confere o desafio e as duas fotos (posição da cabeça, mesma pessoa nas duas). */
+async function provaDeVida(c: ContextoProvaVida) {
   const quadros = c.quadros ?? [];
   if (quadros.length !== 2 || quadros[0].passo !== "FRENTE" || !["ESQUERDA", "DIREITA"].includes(quadros[1].passo)) {
     throw new ErroHttp(400, "Faça a verificação de rosto antes de bater o ponto");
@@ -78,13 +120,12 @@ export async function verificarRosto(c: ContextoVerificacao): Promise<{ distanci
   if (!c.offline) {
     const d = c.desafioId ? desafios.get(c.desafioId) : undefined;
     if (c.desafioId) desafios.delete(c.desafioId);
-    if (!d || d.funcionarioId !== c.funcionarioId || d.expira < Date.now()) {
+    if (!d || d.funcionarioId !== c.donoDesafio || d.expira < Date.now()) {
       throw new ErroHttp(400, "A verificação expirou. Tente de novo.");
     }
     if (d.passos.some((p, i) => quadros[i].passo !== p)) throw new ErroHttp(400, "Verificação fora da ordem pedida");
   }
 
-  const cadastro = JSON.parse(c.descritorCadastro) as number[];
   const fotos = quadros.map((q) => {
     const b = decodificarJpeg(q.imagem);
     if (b.length < 1000 || b.length > 1_500_000) throw new ErroHttp(400, "Foto inválida");
@@ -114,13 +155,7 @@ export async function verificarRosto(c: ContextoVerificacao): Promise<{ distanci
   // As duas fotos precisam ser da mesma pessoa (impede trocar de rosto entre os passos)
   if (distanciaRostos(frente.descritor, lado.descritor) > 0.6) await recusar("Prova de vida falhou: rostos diferentes entre as fotos");
 
-  const distFrente = distanciaRostos(frente.descritor, cadastro);
-  const distLado = distanciaRostos(lado.descritor, cadastro);
-  if (distFrente > c.limiar || distLado > c.limiar + FOLGA_VIRADO) {
-    await recusar("Rosto não reconhecido", distFrente);
-  }
-
-  return { distancia: distFrente, foto: fotos[0], provaVida: c.offline ? "OFFLINE" : "SERVIDOR" };
+  return { frente, lado, foto: fotos[0], recusar };
 }
 
 async function salvarFoto(empresaId: string, nome: string, foto: Buffer) {
@@ -130,11 +165,12 @@ async function salvarFoto(empresaId: string, nome: string, foto: Buffer) {
   return relativo;
 }
 
-async function registrarTentativa(c: ContextoVerificacao, motivo: string, foto: Buffer, distancia?: number) {
+async function registrarTentativa(c: ContextoProvaVida, motivo: string, foto: Buffer, distancia?: number) {
   await prisma.tentativaRecusada.create({
     data: {
       empresaId: c.empresaId,
       funcionarioId: c.funcionarioId,
+      quiosqueId: c.quiosqueId,
       motivo,
       distanciaFacial: distancia,
       foto: await salvarFoto(c.empresaId, `recusada-${randomUUID()}.jpg`, foto),

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Espelho de ponto assinado</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    .folha { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+    .cabecalho { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 2px solid var(--text); padding-bottom: 12px; margin-bottom: 16px; }
+    .bloco-assinatura { margin-top: 24px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; }
+    @media print { .folha { padding: 0; } table { font-size: 11px; } th, td { padding: 4px 6px; } }
+  </style>
+</head>
+<body>
+  <div class="folha" id="folha"><p class="muted">Carregando…</p></div>
+  <script type="module">
+    import { api, dataBr, esc, tabelaEspelho, token } from "/app.js";
+    if (!token.get()) location.href = "/";
+    const id = new URLSearchParams(location.search).get("id");
+    const eu = await api("GET", "/api/auth/eu");
+    const base = eu.papel === "FUNCIONARIO" ? "/api/ponto" : "/api/admin";
+    const folha = document.getElementById("folha");
+    try {
+      const e = await api("GET", `${base}/assinaturas/${encodeURIComponent(id)}`);
+      const a = e.assinatura;
+      const situacao = {
+        PENDENTE: "Aguardando a assinatura do funcionário.",
+        ASSINADO: `Assinado eletronicamente pelo funcionário em ${new Date(a.assinadoEm).toLocaleString("pt-BR")} (confirmação com senha pessoal, IP ${esc(a.ip ?? "-")}).`,
+        CONTESTADO: `Contestado pelo funcionário em ${new Date(a.assinadoEm).toLocaleString("pt-BR")}: "${esc(a.observacao)}"`,
+      }[a.status];
+      folha.innerHTML = `<div class="cabecalho">
+          <div><h1 style="margin:0">Espelho de ponto</h1>
+            <div>${esc(e.empresa.razaoSocial)} · CNPJ ${e.empresa.cnpj}</div></div>
+          <div style="text-align:right"><strong>${esc(e.funcionario.nome)}</strong><br>
+            CPF ${e.funcionario.cpf}${e.funcionario.matricula ? ` · Matrícula ${esc(e.funcionario.matricula)}` : ""}<br>
+            ${esc(e.funcionario.jornada ?? "")} · ${dataBr(e.periodo.inicio)} a ${dataBr(e.periodo.fim)}</div>
+        </div>
+        ${tabelaEspelho(e)}
+        <div class="bloco-assinatura">
+          <strong>${a.status === "ASSINADO" ? "Assinatura eletrônica" : "Situação"}</strong>
+          <p style="margin:6px 0">${situacao}</p>
+          <p class="muted small" style="margin:0">Período fechado em ${new Date(a.fechadoEm).toLocaleString("pt-BR")}${a.fechamentoStatus === "REABERTO" ? " (depois reaberto pelo RH)" : ""}.
+            Código de verificação do espelho (SHA-256): <span class="mono">${a.hash}</span>
+            ${a.conferido ? "· conteúdo íntegro" : '· <strong style="color:var(--danger)">ATENÇÃO: o conteúdo não confere com o código</strong>'}</p>
+        </div>
+        <div class="acoes nao-imprimir" style="margin-top:16px"><button class="primary" onclick="print()">Imprimir / salvar PDF</button></div>`;
+    } catch (err) {
+      folha.innerHTML = `<p class="alerta">${esc(err.message)}</p>`;
+    }
+  </script>
+</body>
+</html>

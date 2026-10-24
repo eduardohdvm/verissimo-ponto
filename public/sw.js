@@ -1,8 +1,9 @@
-// Service worker: mantém a tela de ponto abrindo mesmo sem internet.
+// Service worker: mantém a tela de ponto abrindo mesmo sem internet e recebe as notificações push.
 // As marcações feitas offline ficam guardadas no aparelho (ver ponto.js).
-const CACHE = "ponto-v2";
+const CACHE = "ponto-v3";
 const ARQUIVOS = [
-  "/ponto", "/ponto.js", "/app.js", "/face-cliente.js", "/styles.css", "/icon.svg", "/manifest.webmanifest",
+  "/ponto", "/ponto.js", "/app.js", "/push.js", "/face-cliente.js", "/styles.css", "/icon.svg", "/manifest.webmanifest",
+  "/quiosque", "/quiosque.js",
   // Reconhecimento facial também precisa abrir sem internet
   "/vendor/face-api.esm.js",
   "/modelos/tiny_face_detector_model-weights_manifest.json", "/modelos/tiny_face_detector_model.bin",
@@ -31,5 +32,32 @@ self.addEventListener("fetch", (e) => {
         return r;
       })
       .catch(() => caches.match(e.request)),
+  );
+});
+
+self.addEventListener("push", (e) => {
+  const dados = e.data ? e.data.json() : {};
+  e.waitUntil(
+    self.registration.showNotification(dados.titulo ?? "Ponto", {
+      body: dados.texto ?? "",
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      data: { link: dados.link ?? "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const link = e.notification.data?.link ?? "/";
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
+      const aberta = janelas.find((j) => j.url.startsWith(self.location.origin));
+      if (aberta) {
+        aberta.navigate(link);
+        return aberta.focus();
+      }
+      return self.clients.openWindow(link);
+    }),
   );
 });

@@ -20,9 +20,19 @@
         <label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
         <p id="erro-login" class="alerta oculto"></p>
         <button class="primary" style="width:100%">Entrar</button>
+        <p class="small" style="text-align:center;margin:12px 0 0"><a href="#" id="ir-esqueci">Esqueci minha senha</a></p>
         <p class="muted small" style="text-align:center;margin-bottom:0">
           Empresa nova? <a href="#" id="ir-cadastro">Comece o teste grátis</a>
         </p>
+      </form>
+
+      <form id="form-esqueci" class="card oculto">
+        <h1>Esqueci minha senha</h1>
+        <p class="muted small">Informe o seu e-mail de login. Se ele estiver cadastrado, você vai receber um link para criar uma nova senha.</p>
+        <label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+        <p id="erro-esqueci" class="alerta oculto"></p>
+        <button class="primary" style="width:100%">Enviar link</button>
+        <p class="muted small" style="text-align:center;margin-bottom:0"><a href="#" data-voltar>Voltar para o login</a></p>
       </form>
 
       <form id="form-cadastro" class="card oculto">
@@ -34,7 +44,7 @@
         <label>Senha (mínimo 8 caracteres)<input name="senha" type="password" minlength="8" autocomplete="new-password" required></label>
         <p id="erro-cadastro" class="alerta oculto"></p>
         <button class="primary" style="width:100%">Criar conta</button>
-        <p class="muted small" style="text-align:center;margin-bottom:0"><a href="#" id="ir-login">Já tenho conta</a></p>
+        <p class="muted small" style="text-align:center;margin-bottom:0"><a href="#" data-voltar>Já tenho conta</a></p>
       </form>
     </div>
   </main>
@@ -49,8 +59,24 @@
 
     const login = document.getElementById("form-login");
     const cadastro = document.getElementById("form-cadastro");
-    document.getElementById("ir-cadastro").onclick = (e) => { e.preventDefault(); login.classList.add("oculto"); cadastro.classList.remove("oculto"); };
-    document.getElementById("ir-login").onclick = (e) => { e.preventDefault(); cadastro.classList.add("oculto"); login.classList.remove("oculto"); };
+    const esqueci = document.getElementById("form-esqueci");
+    const mostrar = (form) => [login, cadastro, esqueci].forEach((f) => f.classList.toggle("oculto", f !== form));
+    document.getElementById("ir-cadastro").onclick = (e) => { e.preventDefault(); mostrar(cadastro); };
+    document.getElementById("ir-esqueci").onclick = (e) => { e.preventDefault(); mostrar(esqueci); };
+    document.querySelectorAll("[data-voltar]").forEach((a) => (a.onclick = (e) => { e.preventDefault(); mostrar(login); }));
+
+    esqueci.onsubmit = async (e) => {
+      e.preventDefault();
+      const erro = document.getElementById("erro-esqueci");
+      try {
+        await api("POST", "/api/auth/esqueci", Object.fromEntries(new FormData(esqueci)));
+        erro.className = "alerta ok";
+        erro.textContent = "Pronto. Se o e-mail estiver cadastrado, o link chega em alguns minutos (confira também o spam).";
+      } catch (err) {
+        erro.className = "alerta";
+        erro.textContent = err.message;
+      }
+    };
 
     function enviar(form, url, erroEl, depois) {
       form.onsubmit = async (e) => {

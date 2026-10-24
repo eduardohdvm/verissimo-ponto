@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Empresas clientes · Sistema de Ponto</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="principal" style="margin:0 auto">
+    <div class="topo"><h1>Empresas clientes</h1><div class="acoes"><a class="btn" href="/admin">Voltar ao painel</a></div></div>
+    <div class="kpis" id="kpis" style="margin-bottom:16px"></div>
+    <div class="card"><div id="lista"><p class="muted">Carregando…</p></div></div>
+  </main>
+  <script type="module">
+    import { api, esc, token } from "/app.js";
+    if (!token.get()) location.href = "/";
+    const reais = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const PLANOS = ["TRIAL", "BASICO", "PRO"];
+
+    async function carregar() {
+      let lista;
+      try {
+        lista = await api("GET", "/api/superadmin/empresas");
+      } catch (err) {
+        document.getElementById("lista").innerHTML = `<p class="alerta">${esc(err.message)}</p>`;
+        return;
+      }
+      const pagantes = lista.filter((e) => e.plano !== "TRIAL" && !e.bloqueada);
+      document.getElementById("kpis").innerHTML = `
+        <div class="card kpi"><div class="valor">${lista.length}</div><div class="rotulo">Empresas</div></div>
+        <div class="card kpi"><div class="valor">${pagantes.length}</div><div class="rotulo">Pagantes</div></div>
+        <div class="card kpi"><div class="valor">${lista.reduce((s, e) => s + e.ativos, 0)}</div><div class="rotulo">Funcionários ativos</div></div>
+        <div class="card kpi"><div class="valor" style="font-size:22px">${reais(pagantes.reduce((s, e) => s + e.mensal, 0))}</div><div class="rotulo">Receita mensal estimada</div></div>`;
+      document.getElementById("lista").innerHTML = `<div class="tabela-wrap"><table>
+        <thead><tr><th>Empresa</th><th>Responsável</th><th>Funcionários</th><th>Último ponto</th><th>Plano</th><th>Teste até</th><th>Bloqueada</th><th></th></tr></thead>
+        <tbody>${lista.map((e) => `<tr data-id="${e.id}">
+          <td><strong>${esc(e.razaoSocial)}</strong><br><span class="muted small">CNPJ ${e.cnpj} · desde ${new Date(e.criadoEm).toLocaleDateString("pt-BR")}</span></td>
+          <td class="small">${esc(e.responsavel?.nome ?? "—")}<br>${esc(e.responsavel?.email ?? "")}</td>
+          <td class="tnum">${e.ativos}</td>
+          <td class="small">${e.ultimaMarcacao ? new Date(e.ultimaMarcacao).toLocaleDateString("pt-BR") : "nunca"}</td>
+          <td><select name="plano" style="width:auto">${PLANOS.map((p) => `<option ${p === e.plano ? "selected" : ""}>${p}</option>`).join("")}</select></td>
+          <td><input type="date" name="trialAte" value="${e.trialAte ? e.trialAte.slice(0, 10) : ""}" style="width:auto"></td>
+          <td><input type="checkbox" name="bloqueada" ${e.bloqueada ? "checked" : ""}></td>
+          <td><button class="sm primary" data-salvar>Salvar</button></td></tr>`).join("")}</tbody></table></div>`;
+      document.querySelectorAll("[data-salvar]").forEach((b) => (b.onclick = async () => {
+        const tr = b.closest("tr");
+        try {
+          await api("PUT", `/api/superadmin/empresas/${tr.dataset.id}`, {
+            plano: tr.querySelector("[name=plano]").value,
+            trialAte: tr.querySelector("[name=trialAte]").value || null,
+            bloqueada: tr.querySelector("[name=bloqueada]").checked,
+          });
+          b.textContent = "Salvo";
+          setTimeout(carregar, 800);
+        } catch (err) {
+          alert(err.message);
+        }
+      }));
+    }
+    carregar();
+  </script>
+</body>
+</html>
