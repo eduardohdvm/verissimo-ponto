@@ -3,104 +3,58 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Bater ponto</title>
+  <title>Ponto</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg">
-  <meta name="theme-color" content="#1463d9">
+  <meta name="theme-color" content="#24485c">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="/styles.css">
-  <style>
-    .ponto { max-width: 520px; margin: 0 auto; padding: 16px; }
-    .cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .relogio { text-align: center; }
-    .relogio .hora { font-size: 56px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.1; }
-    .camera { position: relative; aspect-ratio: 4 / 3; background: var(--surface-2); border-radius: 12px; overflow: hidden; display: grid; place-items: center; }
-    .camera video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-    .guia { position: absolute; inset: auto 0 0 0; padding: 14px 16px 16px; background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; text-align: center; font-size: 18px; font-weight: 600; }
-    .guia .barra { height: 4px; background: rgb(255 255 255 / 30%); border-radius: 2px; margin-top: 10px; overflow: hidden; }
-    .guia .barra i { display: block; height: 100%; width: 0; background: #4cc58a; transition: width .3s; }
-    .status { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-    #registrar { width: 100%; padding: 16px; font-size: 18px; border-radius: 12px; }
-    .abas { display: flex; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; margin-bottom: 16px; }
-    .abas button { flex: 1; border: none; background: transparent; padding: 8px; }
-    .abas button.ativo { background: var(--surface); box-shadow: var(--shadow); font-weight: 600; }
-    .marcas { display: flex; gap: 8px; flex-wrap: wrap; }
-    .marcas .tag { font-size: 15px; padding: 4px 12px; cursor: pointer; border: none; }
-    .resumo-dia { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; font-size: 15px; }
-    .resumo-dia strong { font-variant-numeric: tabular-nums; }
-    .contador-aba { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; line-height: 18px; }
-  </style>
+  <link rel="stylesheet" href="/ponto.css">
 </head>
-<body>
-  <div class="ponto">
-    <div class="cab">
-      <div><strong id="nome">…</strong><div class="muted small" id="empresa"></div></div>
-      <button class="sm" id="sair">Sair</button>
+<body class="app-func">
+  <header class="cabeca" id="cabeca">
+    <div class="cabeca-barra">
+      <button class="logo-empresa" id="logo-empresa" aria-label="Empresa"></button>
+      <div class="marca-app"><span class="marca-app-icone" id="marca-icone"></span><span>PONTO</span></div>
+      <button class="icone-btn" id="btn-sino" aria-label="Notificações">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span class="ponto-vermelho oculto" id="sino-contador"></span>
+      </button>
     </div>
+    <div class="cabeca-titulo oculto" id="cabeca-titulo"><h1 id="titulo"></h1><p id="subtitulo"></p></div>
+  </header>
 
-    <div class="abas">
-      <button data-aba="bater" class="ativo">Ponto</button>
-      <button data-aba="espelho">Espelho</button>
-      <button data-aba="ajuste">Pedidos</button>
-      <button data-aba="assinar">Assinar <span class="contador-aba oculto" id="pendentes"></span></button>
-    </div>
-
-    <section id="aba-bater" class="stack">
-      <div class="relogio"><div class="hora" id="hora">--:--</div><div class="muted" id="data"></div></div>
-      <div class="resumo-dia" id="resumo"></div>
-      <div class="camera" id="camera"><span class="muted small">Câmera desligada</span>
-        <div class="guia oculto" id="guia"><span></span><div class="barra"><i></i></div></div></div>
-      <div class="status" id="status"></div>
-      <p id="msg" class="alerta oculto"></p>
-      <button class="primary" id="registrar" disabled>Registrar ponto</button>
-      <div class="card">
-        <h3>Marcações de hoje</h3>
-        <div class="marcas" id="marcas"><span class="muted">Nenhuma ainda</span></div>
-        <p class="muted small" style="margin:8px 0 0">Toque numa marcação para ver o comprovante.</p>
-      </div>
-      <div class="card oculto" id="avisos">
-        <h3>Avisos no celular</h3>
-        <p class="muted small">Receba lembretes para bater o ponto e a resposta dos seus pedidos.</p>
-        <button id="ativar-push">Ativar avisos</button>
-      </div>
-    </section>
-
-    <section id="aba-assinar" class="oculto stack">
-      <div class="card"><h2>Espelhos para assinar</h2>
-        <p class="muted small">No fim de cada mês o RH fecha o período e envia o seu espelho de ponto. Confira os horários e assine,
-          ou conteste se algo estiver errado.</p>
-        <div id="assinaturas"></div></div>
-    </section>
-
-    <section id="aba-espelho" class="oculto stack">
-      <input type="month" id="mes">
-      <div id="espelho" class="card"></div>
-    </section>
-
-    <section id="aba-ajuste" class="oculto stack">
-      <form class="card" id="form-ajuste">
-        <h2>Pedir ajuste</h2>
-        <p class="muted small">Esqueceu de marcar, teve atestado ou precisa justificar uma ausência? Seu gestor vai analisar.</p>
-        <label>O que aconteceu?<select name="tipo">
-          <option value="INCLUSAO">Esqueci de marcar o ponto</option>
-          <option value="ATESTADO">Atestado médico</option>
-          <option value="ABONO">Outra ausência justificada</option>
-        </select></label>
-        <div class="grid2">
-          <label><span id="rotulo-data">Dia</span><input name="data" type="date" required></label>
-          <label id="campo-hora">Horário<input name="hora" type="time"></label>
-          <label id="campo-fim" class="oculto">Até o dia<input name="fim" type="date"></label>
-        </div>
-        <label id="campo-anexo" class="oculto">Foto do atestado<input name="anexo" type="file" accept="image/*,application/pdf" capture="environment"></label>
-        <label>Motivo / observação<input name="motivo" required></label>
-        <p id="erro-ajuste" class="alerta oculto"></p>
-        <div class="acoes"><button class="primary">Enviar</button></div>
-      </form>
-      <div class="card"><h3>Minhas solicitações</h3><div id="minhas"></div></div>
-    </section>
+  <div class="perfil oculto" id="perfil">
+    <div class="avatar" id="avatar"></div>
+    <div class="perfil-textos"><div class="perfil-nome" id="nome">…</div><div class="perfil-cargo" id="cargo"></div></div>
   </div>
 
-  <dialog id="comprovante"></dialog>
+  <main class="conteudo-app" id="tela"></main>
+
+  <!-- Tela de bater ponto: fica montada para não desligar câmera e GPS a cada troca de tela -->
+  <section class="conteudo-app oculto" id="tela-bater">
+    <div class="cartao relogio"><div class="hora" id="hora">--:--</div><div class="muted" id="data"></div></div>
+    <div class="camera" id="camera"><span class="muted small">Câmera desligada</span>
+      <div class="guia oculto" id="guia"><span></span><div class="barra"><i></i></div></div></div>
+    <div class="status" id="status"></div>
+    <p id="msg" class="alerta oculto"></p>
+    <button class="primary botao-grande" id="registrar" disabled>Registrar ponto</button>
+    <div class="cartao">
+      <h3>Marcações de hoje</h3>
+      <div class="marcas" id="marcas"><span class="muted">Nenhuma ainda</span></div>
+      <p class="muted small" style="margin:8px 0 0">Toque numa marcação para ver o comprovante.</p>
+    </div>
+  </section>
+
+  <nav class="barra-inferior" id="barra">
+    <a href="#inicio" data-nav="inicio"><svg viewBox="0 0 24 24"><path d="M3 11 12 3l9 8v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Home</a>
+    <a href="#arquivos" data-nav="arquivos"><svg viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Arquivos</a>
+    <a href="#bater" class="botao-camera" data-nav="bater" aria-label="Bater ponto"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></a>
+    <a href="#suporte" data-nav="suporte"><svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14h3v5H5a1 1 0 0 1-1-1zM20 14h-3v5h2a1 1 0 0 0 1-1z"/></svg>Suporte</a>
+    <a href="#menu" data-nav="menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu</a>
+  </nav>
+
+  <dialog id="modal"></dialog>
   <canvas id="canvas" class="oculto"></canvas>
   <script type="module" src="/ponto.js"></script>
 </body>

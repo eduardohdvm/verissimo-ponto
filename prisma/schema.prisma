@@ -26,6 +26,12 @@ model Empresa {
   ultimoHash        String    @default("") // encadeamento de hash das marcações
   // Distância máxima entre o rosto do ponto e o do cadastro (menor = mais rigoroso)
   limiarFacial      Float     @default(0.5)
+  // Identidade e suporte mostrados no app do funcionário
+  logo              String? // imagem em uploads/
+  suporteWhatsapp   String?
+  suporteTelefone   String?
+  suporteEmail      String?
+  suporteHorario    String?
   criadoEm          DateTime  @default(now())
 
   usuarios      Usuario[]
@@ -44,6 +50,61 @@ model Empresa {
   fechamentos   Fechamento[]
   quiosques     Quiosque[]
   notificacoes  Notificacao[]
+  comunicados   Comunicado[]
+  documentos    Documento[]
+}
+
+// Informativos para os funcionários (aparecem no carrossel do app; "popup" abre sozinho uma vez)
+model Comunicado {
+  id             String    @id @default(cuid())
+  empresaId      String
+  empresa        Empresa   @relation(fields: [empresaId], references: [id])
+  titulo         String
+  texto          String
+  imagem         String? // uploads/
+  cor            String    @default("azul") // azul | roxo | laranja | verde | vermelho
+  popup          Boolean   @default(false)
+  departamentoId String? // vazio = empresa toda
+  expiraEm       DateTime?
+  criadoPor      String
+  criadoEm       DateTime  @default(now())
+
+  leituras ComunicadoLeitura[]
+
+  @@index([empresaId, criadoEm])
+}
+
+model ComunicadoLeitura {
+  comunicadoId String
+  comunicado   Comunicado @relation(fields: [comunicadoId], references: [id], onDelete: Cascade)
+  usuarioId    String
+  lidoEm       DateTime   @default(now())
+
+  @@id([comunicadoId, usuarioId])
+}
+
+// Arquivos enviados pelo RH ao funcionário (contracheque, informe de rendimentos…), com assinatura eletrônica
+model Documento {
+  id              String      @id @default(cuid())
+  empresaId       String
+  empresa         Empresa     @relation(fields: [empresaId], references: [id])
+  funcionarioId   String
+  funcionario     Funcionario @relation(fields: [funcionarioId], references: [id])
+  tipo            String // CONTRACHEQUE | INFORME_RENDIMENTOS | FERIAS | CONTRATO | OUTRO
+  competencia     String // AAAA-MM
+  titulo          String?
+  arquivo         String // uploads/
+  hash            String // sha256 do arquivo: prova de que o assinado é o enviado
+  exigeAssinatura Boolean     @default(true)
+  status          String      @default("PENDENTE") // PENDENTE | ASSINADO | VISUALIZADO
+  visualizadoEm   DateTime?
+  assinadoEm      DateTime?
+  ip              String?
+  criadoPor       String
+  criadoEm        DateTime    @default(now())
+
+  @@index([empresaId, competencia])
+  @@index([funcionarioId, criadoEm])
 }
 
 model Filial {
@@ -151,6 +212,7 @@ model Funcionario {
   tentativas   TentativaRecusada[]
   afastamentos Afastamento[]
   assinaturas  AssinaturaEspelho[]
+  documentos   Documento[]
 
   @@unique([empresaId, cpf])
   @@unique([empresaId, codigoExterno])

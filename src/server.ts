@@ -8,11 +8,13 @@ import { ErroHttp } from "./lib/erros.js";
 import { FACIAL_ATIVO, iniciarFace } from "./lib/face.js";
 import { rotasAdmin } from "./routes/admin.js";
 import { rotasAfastamentos } from "./routes/admin-afastamentos.js";
+import { rotasConteudo } from "./routes/admin-conteudo.js";
 import { rotasConfig } from "./routes/admin-config.js";
 import { rotasFechamentos } from "./routes/admin-fechamentos.js";
 import { rotasFolha } from "./routes/admin-folha.js";
 import { rotasOrg } from "./routes/admin-org.js";
 import { rotasApiV1 } from "./routes/api-v1.js";
+import { rotasApp } from "./routes/app.js";
 import { rotasAuth } from "./routes/auth.js";
 import { rotasConta, rotasSuperadmin } from "./routes/conta.js";
 import { rotasNotificacoes } from "./routes/notificacoes.js";
@@ -32,10 +34,10 @@ app.use(
   "/api/admin",
   autenticar,
   exigirEmpresaAtiva(["/conta"]),
-  rotasAdmin, rotasConfig, rotasOrg, rotasAfastamentos, rotasFechamentos, rotasFolha, rotasQuiosquesAdmin, rotasConta,
+  rotasAdmin, rotasConfig, rotasOrg, rotasAfastamentos, rotasFechamentos, rotasFolha, rotasQuiosquesAdmin, rotasConta, rotasConteudo,
 );
 app.use("/api/quiosque", rotasQuiosque);
-app.use("/api/ponto", autenticar, exigirEmpresaAtiva(), rotasPonto);
+app.use("/api/ponto", autenticar, exigirEmpresaAtiva(), rotasPonto, rotasApp);
 app.use("/api/v1", autenticarApiKey, exigirEmpresaAtiva(), rotasApiV1);
 app.use("/api/superadmin", rotasSuperadmin);
 app.use("/api", rotasNotificacoes);

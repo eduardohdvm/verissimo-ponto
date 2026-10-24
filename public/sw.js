@@ -1,8 +1,8 @@
 // Service worker: mantém a tela de ponto abrindo mesmo sem internet e recebe as notificações push.
 // As marcações feitas offline ficam guardadas no aparelho (ver ponto.js).
-const CACHE = "ponto-v3";
+const CACHE = "ponto-v4";
 const ARQUIVOS = [
-  "/ponto", "/ponto.js", "/app.js", "/push.js", "/face-cliente.js", "/styles.css", "/icon.svg", "/manifest.webmanifest",
+  "/ponto", "/ponto.js", "/ponto.css", "/app.js", "/push.js", "/face-cliente.js", "/styles.css", "/icon.svg", "/manifest.webmanifest",
   "/quiosque", "/quiosque.js",
   // Reconhecimento facial também precisa abrir sem internet
   "/vendor/face-api.esm.js",

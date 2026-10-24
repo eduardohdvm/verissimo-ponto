@@ -23,8 +23,11 @@ Câmera e GPS no navegador só funcionam em `localhost` ou em HTTPS. Sem SMTP co
 ## O que tem
 
 **Funcionário (`/ponto`, instalável no celular como app)**
+- Home com foto e cargo, logo da empresa, últimos registros, "próximo registro" com progresso das batidas, informativos, banco de horas (crédito/débito/acumulado), gráfico da semana com meta e atalhos
+- Barra inferior: Home, Arquivos, botão de câmera para bater ponto, Suporte e Menu
+- Espelho em cartões por dia, histórico com a foto de cada batida, arquivos recebidos (contracheques e folhas de ponto) para abrir e assinar, suporte com WhatsApp/telefone/e-mail do RH e mensagem
+- Comunicados da empresa; os importantes abrem sozinhos uma vez
 - Bater ponto com foto, GPS e cerca virtual; o botão mostra se é entrada ou saída
-- Horas trabalhadas hoje e saldo do banco de horas na tela principal
 - Funciona sem internet: guarda a marcação no aparelho e envia quando voltar
 - Comprovante de cada registro, inclusive em PDF assinado digitalmente
 - Espelho do mês, pedido de ajuste e envio de atestado com foto
@@ -48,6 +51,9 @@ Câmera e GPS no navegador só funcionam em `localhost` ou em HTTPS. Sem SMTP co
 - Férias, atestados e afastamentos (sem falta e sem débito)
 - Espelho de ponto com ajustes que nunca alteram a marcação original
 - Fechamento do mês: congela o espelho, pede a assinatura de cada funcionário, permite reabrir com motivo registrado
+- Comunicados para o app (com imagem, cor, público e contagem de leituras)
+- Documentos para o funcionário (contracheque, informe de rendimentos…), um a um ou em lote identificando a pessoa pelo CPF ou matrícula no nome do arquivo, com assinatura no app
+- Logo da empresa e contatos de suporte mostrados no app
 - Exportação para a folha em CSV configurável (código de cada evento, separador, horas decimais ou HH:MM)
 - AFD, AEJ e AFD assinado (.p7s); chaves de API e webhooks para o ERP
 - Notificações: pedidos novos, contestações, funcionário que não bateu a entrada

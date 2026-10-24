@@ -183,3 +183,9 @@ dialog::backdrop { background: rgb(10 15 25 / 45%); }
 .passos li.feito::before { background: var(--ok); border-color: var(--ok); }
 .passos li.feito strong { text-decoration: line-through; color: var(--muted); }
 .passos a { color: var(--text); text-decoration: none; }
+
+/* Comunicados e logo no painel */
+.bolinha { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.cor-azul { background: #1463d9; } .cor-roxo { background: #6d3df2; } .cor-laranja { background: #d9830f; }
+.cor-verde { background: #1f9d55; } .cor-vermelho { background: #d63a35; }
+.logo-previa img { max-height: 56px; max-width: 160px; border-radius: 8px; background: #fff; padding: 4px; }

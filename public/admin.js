@@ -1,6 +1,8 @@
-// Casca do painel do RH: menu conforme o papel e navegação entre as telas (public/admin/*.js).
+// Casca do painel do RH: menu conforme o papel e navegação entre as telas (public/rh/*.js).
 import { api, esc, LOGO, sair, token } from "/app.js";
 import { telaAfastamentos } from "./rh/afastamentos.js";
+import { telaComunicados } from "./rh/comunicados.js";
+import { telaDocumentos } from "./rh/documentos.js";
 import { telaConta } from "./rh/conta.js";
 import { telaEspelho } from "./rh/espelho.js";
 import { telaFechamentos } from "./rh/fechamentos.js";
@@ -29,6 +31,8 @@ const TELAS = [
   ["solicitacoes", "Solicitações", telaSolicitacoes, false],
   ["afastamentos", "Férias e afastamentos", telaAfastamentos, false],
   ["fechamento", "Fechamento do mês", telaFechamentos, true],
+  ["comunicados", "Comunicados", telaComunicados, true],
+  ["documentos", "Documentos (contracheques)", telaDocumentos, true],
   ["folha", "Exportar para a folha", telaFolha, true],
   ["organizacao", "Organização", telaOrganizacao, true],
   ["jornadas", "Jornadas e regras", telaJornadas, true],
