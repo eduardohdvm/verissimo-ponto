@@ -5,8 +5,12 @@ import { prisma } from "../db.js";
 import { ErroHttp } from "../lib/erros.js";
 import { decodificarJpeg, FACIAL_ATIVO } from "../lib/face.js";
 import { distanciaMetros } from "../lib/geo.js";
-import { isoComOffset, partesLocais, utcDeLocal } from "../lib/tempo.js";
+import { intervalosPrevistos, type ConfigJornada } from "../lib/calculo.js";
+import type { Preferencias } from "../lib/preferencias.js";
+import { horaParaMin, isoComOffset, partesLocais, utcDeLocal } from "../lib/tempo.js";
+import { tipoBatida } from "./app-funcionario.js";
 import { PASTA_UPLOADS, verificarRosto, type Quadro } from "./facial.js";
+import { avisarEquipe } from "./notificacoes.js";
 import { dispararWebhook } from "./webhooks.js";
 
 export { PASTA_UPLOADS };
@@ -140,7 +144,30 @@ export async function registrarMarcacao(n: NovaMarcacao) {
   const sequenciaHoje = await prisma.marcacao.count({
     where: { funcionarioId: func.id, dataHora: { gte: utcDeLocal(hoje, "00:00", func.empresa.fusoHorario), lte: dataHora } },
   });
+  avisarBatida(func, dataHora, sequenciaHoje, func.empresa.fusoHorario, n.origem);
   return { ...comprovante, sequenciaHoje };
+}
+
+/** Avisa os gestores que pediram (todas as batidas, ou só as com mais de 15 min de diferença do previsto). */
+function avisarBatida(
+  f: { id: string; nome: string; empresaId: string; departamentoId: string | null; jornadaId: string | null },
+  quando: Date,
+  sequencia: number,
+  fuso: string,
+  origem: string,
+) {
+  void (async () => {
+    const p = partesLocais(quando, fuso);
+    const jornada = f.jornadaId ? await prisma.jornada.findUnique({ where: { id: f.jornadaId } }) : null;
+    const previstas = jornada ? intervalosPrevistos(JSON.parse(jornada.horarios) as ConfigJornada, p.data).flat() : [];
+    const esperado = previstas[sequencia - 1];
+    const fora = !esperado || Math.abs(p.minutoDoDia - horaParaMin(esperado)) > 15;
+    const tipo = tipoBatida(sequencia - 1, previstas.length || 2).toLowerCase();
+    const texto = `${f.nome} registrou ${tipo} às ${p.hora}${esperado ? ` (prevista ${esperado})` : " (fora da jornada)"}${origem === "QUIOSQUE" ? " no quiosque" : ""}.`;
+    await avisarEquipe(f.empresaId, f, "batida", fora ? "Batida fora do horário" : "Batida de ponto", texto, "/admin#painel", {
+      filtro: (pref) => (pref as Preferencias["batida"]).modo === "TODAS" || fora,
+    });
+  })().catch((e) => console.error("Erro ao avisar a batida:", e));
 }
 
 /** Dados do comprovante de registro de ponto entregue ao trabalhador. */

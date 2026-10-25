@@ -13,6 +13,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { prisma } from "../db.js";
 import { ErroHttp } from "../lib/erros.js";
+import { avisarEquipeEmSegundoPlano } from "./notificacoes.js";
 import { analisarRosto, decodificarJpeg, distanciaRostos, type RostoAnalisado } from "../lib/face.js";
 
 export type Passo = "FRENTE" | "ESQUERDA" | "DIREITA";
@@ -177,6 +178,9 @@ async function registrarTentativa(c: ContextoProvaVida, motivo: string, foto: Bu
       ip: c.ip,
     },
   });
+  const f = c.funcionarioId ? await prisma.funcionario.findUnique({ where: { id: c.funcionarioId } }) : null;
+  avisarEquipeEmSegundoPlano(c.empresaId, { id: f?.id ?? null, departamentoId: f?.departamentoId ?? null }, "facialRecusado",
+    "Rosto recusado", `${f ? f.nome : "Pessoa não identificada no quiosque"}: ${motivo}.`, "/admin#painel");
 }
 
 /** Cadastro do rosto de referência pelo RH: uma foto de frente, nítida, só com a pessoa. */

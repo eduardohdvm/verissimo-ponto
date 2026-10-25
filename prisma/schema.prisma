@@ -144,20 +144,22 @@ model GestorDepartamento {
 }
 
 model Usuario {
-  id                  String       @id @default(cuid())
-  empresaId           String
-  empresa             Empresa      @relation(fields: [empresaId], references: [id])
-  nome                String
-  email               String       @unique
-  senhaHash           String
-  papel               String // ADMIN | GESTOR | FUNCIONARIO
-  funcionarioId       String?      @unique
-  funcionario         Funcionario? @relation(fields: [funcionarioId], references: [id])
-  ativo               Boolean      @default(true)
+  id                      String       @id @default(cuid())
+  empresaId               String
+  empresa                 Empresa      @relation(fields: [empresaId], references: [id])
+  nome                    String
+  email                   String       @unique
+  senhaHash               String
+  papel                   String // ADMIN | GESTOR | FUNCIONARIO
+  funcionarioId           String?      @unique
+  funcionario             Funcionario? @relation(fields: [funcionarioId], references: [id])
+  ativo                   Boolean      @default(true)
   // LGPD: aceite do termo de uso de foto, biometria e localização
-  consentimentoEm     DateTime?
-  consentimentoVersao String?
-  criadoEm            DateTime     @default(now())
+  consentimentoEm         DateTime?
+  consentimentoVersao     String?
+  // Quais avisos da equipe o gestor/administrador quer receber (ver src/lib/preferencias.ts)
+  preferenciasNotificacao String       @default("{}")
+  criadoEm                DateTime     @default(now())
 
   departamentosGeridos GestorDepartamento[]
   tokens               TokenAcesso[]

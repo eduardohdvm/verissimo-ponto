@@ -4,19 +4,24 @@ import { abrirModal, aoClicar, aoEnviar, caixaLink, conteudo, estado, modal, opc
 const NOME_PAPEL = { ADMIN: "Administrador", GESTOR: "Gestor" };
 
 export async function telaOrganizacao() {
-  const [filiais, departamentos, usuarios] = await Promise.all([
+  const [filiais, departamentos, usuarios, funcionarios] = await Promise.all([
     api("GET", "/api/admin/filiais"),
     api("GET", "/api/admin/departamentos"),
     api("GET", "/api/admin/usuarios"),
+    api("GET", "/api/admin/funcionarios"),
   ]);
-  const ctx = { filiais, departamentos };
+  // Funcionários com login no app que ainda não são da equipe do RH (podem ser promovidos a gestor)
+  const noRh = new Set(usuarios.map((u) => u.funcionarioId).filter(Boolean));
+  const promoviveis = funcionarios.filter((f) => f.ativo && f.usuario && !noRh.has(f.id));
+  const ctx = { filiais, departamentos, promoviveis };
   conteudo().innerHTML = `${topo("Organização")}
     <div class="stack">
       <div class="card">
         <div class="topo" style="margin-bottom:8px"><h2 style="margin:0">Equipe do RH</h2><button class="primary sm" id="novo-usuario">Adicionar pessoa</button></div>
-        <p class="muted small">Administradores veem e configuram tudo. Gestores veem e aprovam só os funcionários dos departamentos deles.</p>
+        <p class="muted small">Administradores veem e configuram tudo. Gestores veem e aprovam só os funcionários dos departamentos deles.
+          Um funcionário promovido a gestor continua batendo ponto pelo app. Cada um escolhe seus avisos em "Minhas notificações".</p>
         <div class="tabela-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Departamentos</th><th>Situação</th><th></th></tr></thead>
-        <tbody>${usuarios.map((u) => `<tr><td><strong>${esc(u.nome)}</strong></td><td class="small">${esc(u.email)}</td>
+        <tbody>${usuarios.map((u) => `<tr><td><strong>${esc(u.nome)}</strong>${u.funcionarioId ? ' <span class="tag info">Também bate ponto</span>' : ""}</td><td class="small">${esc(u.email)}</td>
           <td>${NOME_PAPEL[u.papel]}</td>
           <td class="small">${u.papel === "ADMIN" ? "Todos" : esc(departamentos.filter((d) => u.departamentoIds.includes(d.id)).map((d) => d.nome).join(", ") || "Nenhum")}</td>
           <td>${u.ativo ? '<span class="tag ok">Ativo</span>' : '<span class="tag">Inativo</span>'}</td>
@@ -51,11 +56,18 @@ export async function telaOrganizacao() {
   aoClicar(conteudo(), "del-filial", (id) => remover(`/api/admin/filiais/${id}`, "Remover esta filial?"));
 }
 
-function formUsuario(u, { departamentos }) {
+function formUsuario(u, { departamentos, promoviveis }) {
   abrirModal(`<form>
     <h2>${u ? "Editar acesso" : "Adicionar pessoa ao RH"}</h2>
-    <label>Nome<input name="nome" value="${esc(u?.nome ?? "")}" required></label>
-    ${u ? `<p class="muted small">${esc(u.email)}</p>` : `<label>E-mail<input name="email" type="email" required></label>`}
+    ${u ? "" : `<label>Quem<select name="origem">
+        <option value="novo">Pessoa nova (recebe convite por e-mail)</option>
+        ${promoviveis.length ? `<option value="promover">Promover um funcionário que já usa o app</option>` : ""}
+      </select></label>
+      <label id="campo-funcionario" class="oculto">Funcionário<select name="funcionarioId">${opcoes(promoviveis, "", "Escolha…")}</select></label>`}
+    <div id="campos-novo">
+      <label>Nome<input name="nome" value="${esc(u?.nome ?? "")}" ${u ? "required" : ""}></label>
+      ${u ? `<p class="muted small">${esc(u.email)}</p>` : `<label>E-mail<input name="email" type="email"></label>`}
+    </div>
     <label>Papel<select name="papel">
       <option value="GESTOR" ${u?.papel === "GESTOR" ? "selected" : ""}>Gestor: vê e aprova só a equipe dele</option>
       <option value="ADMIN" ${u?.papel === "ADMIN" ? "selected" : ""}>Administrador: acesso total</option>
@@ -66,14 +78,33 @@ function formUsuario(u, { departamentos }) {
         : '<p class="muted small">Cadastre departamentos primeiro.</p>'}
     </div>
     ${u ? `<label class="check"><input type="checkbox" name="ativo" ${u.ativo ? "checked" : ""} ${u.id === estado.eu?.id ? "disabled" : ""}> Ativo</label>
-      <button type="button" class="sm" id="reenviar">Reenviar convite</button>` : `<p class="muted small">A pessoa recebe um e-mail para criar a própria senha.</p>`}
+      <div class="acoes"><button type="button" class="sm" id="reenviar">Reenviar convite</button>
+        ${u.id === estado.eu?.id ? "" : `<button type="button" class="sm danger" id="remover-rh">${u.funcionarioId ? "Voltar a ser só funcionário" : "Remover do RH"}</button>`}</div>` : ""}
     <div id="convite"></div>
     <div class="acoes"><button class="primary">Salvar</button><button type="button" data-fechar>Fechar</button></div>
   </form>`, (m) => {
     const form = m.querySelector("form");
-    const alternar = () => m.querySelector("#deps").classList.toggle("oculto", form.papel.value !== "GESTOR");
+    const alternar = () => {
+      m.querySelector("#deps").classList.toggle("oculto", form.papel.value !== "GESTOR");
+      if (form.origem) {
+        const promover = form.origem.value === "promover";
+        m.querySelector("#campo-funcionario").classList.toggle("oculto", !promover);
+        m.querySelector("#campos-novo").classList.toggle("oculto", promover);
+      }
+    };
     form.papel.onchange = alternar;
+    if (form.origem) form.origem.onchange = alternar;
     alternar();
+    m.querySelector("#remover-rh")?.addEventListener("click", async () => {
+      if (!confirm(u.funcionarioId ? "Tirar o acesso ao painel? A pessoa continua batendo ponto pelo app." : "Remover esta pessoa da equipe do RH? O login será desativado.")) return;
+      try {
+        await api("DELETE", `/api/admin/usuarios/${u.id}`);
+        modal().close();
+        telaOrganizacao();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
     m.querySelector("#reenviar")?.addEventListener("click", async () => {
       const r = await api("POST", `/api/admin/usuarios/${u.id}/convite`);
       m.querySelector("#convite").innerHTML = caixaLink(r.link, u.nome);
@@ -83,7 +114,13 @@ function formUsuario(u, { departamentos }) {
       if (u) {
         await api("PUT", `/api/admin/usuarios/${u.id}`, { ...corpo, ativo: u.id === estado.eu?.id ? true : fd.has("ativo") });
         modal().close();
+      } else if (fd.get("origem") === "promover") {
+        const f = promoviveis.find((x) => x.id === fd.get("funcionarioId"));
+        if (!f) throw new Error("Escolha o funcionário");
+        await api("POST", "/api/admin/usuarios", { ...corpo, nome: f.nome, funcionarioId: f.id });
+        modal().close();
       } else {
+        if (!fd.get("nome") || !fd.get("email")) throw new Error("Informe o nome e o e-mail");
         const r = await api("POST", "/api/admin/usuarios", { ...corpo, email: fd.get("email") });
         m.querySelector("#convite").innerHTML = caixaLink(r.link, corpo.nome);
         form.querySelector("button.primary").classList.add("oculto");

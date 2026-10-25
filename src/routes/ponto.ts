@@ -13,7 +13,7 @@ import { criarDesafio } from "../services/facial.js";
 import { montarComprovante, registrarMarcacao } from "../services/marcacoes.js";
 import { criarAfastamento } from "../services/afastamentos.js";
 import { comprovantePdf } from "../services/comprovante-pdf.js";
-import { notificar, responsaveisPor } from "../services/notificacoes.js";
+import { avisarEquipe, avisarEquipeEmSegundoPlano } from "../services/notificacoes.js";
 import { montarAssinatura } from "./admin-fechamentos.js";
 import { criarTratamento } from "../services/tratamentos.js";
 import { rota, sessao } from "./util.js";
@@ -244,20 +244,17 @@ rotasPonto.post(
     });
     if (d.acao === "CONTESTAR") {
       const f = await prisma.funcionario.findUniqueOrThrow({ where: { id: a.funcionarioId } });
-      for (const r of await responsaveisPor(a.empresaId, f.departamentoId)) {
-        await notificar(a.empresaId, r.id, "Espelho contestado", `${f.nome} contestou o espelho: ${d.observacao}`, "/admin#fechamento");
-      }
+      avisarEquipeEmSegundoPlano(a.empresaId, f, "contestacoes", "Espelho contestado", `${f.nome} contestou o espelho: ${d.observacao}`, "/admin#fechamento");
     }
     res.json(montarAssinatura(await minhaAssinatura(req)));
   }),
 );
 
+/** Pedido de ajuste ou atestado: avisa os gestores que querem saber de solicitações. */
 function avisarResponsaveis(empresaId: string, funcionarioId: string, titulo: string, texto: string) {
   void (async () => {
     const f = await prisma.funcionario.findUniqueOrThrow({ where: { id: funcionarioId } });
-    for (const r of await responsaveisPor(empresaId, f.departamentoId)) {
-      await notificar(empresaId, r.id, titulo, `${f.nome} ${texto}`, "/admin#solicitacoes");
-    }
+    await avisarEquipe(empresaId, f, "solicitacoes", titulo, `${f.nome} ${texto}`, "/admin#solicitacoes");
   })().catch((e) => console.error("Erro ao avisar gestores:", e));
 }
 

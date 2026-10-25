@@ -198,3 +198,7 @@ label > .campo-senha > input { margin-top: 0; }
   border: none; background: transparent; color: var(--muted); border-radius: 8px; }
 .olho-senha:hover { background: var(--surface-2); color: var(--text); }
 .olho-senha svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Minhas notificações */
+.tabela-pref select { min-width: 180px; }
+.tabela-pref td { vertical-align: middle; }

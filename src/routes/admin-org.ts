@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
-import { autenticar, exigirPapel } from "../auth.js";
+import { autenticar, esquecerUsuario, exigirPapel } from "../auth.js";
 import { prisma } from "../db.js";
 import { ErroHttp, naoEncontrado } from "../lib/erros.js";
 import { enviarConvite } from "../services/acesso.js";
@@ -160,7 +160,7 @@ rotasOrg.get(
     const lista = await prisma.usuario.findMany({
       where: { empresaId: eid(req), papel: { in: ["ADMIN", "GESTOR"] } },
       select: {
-        id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true,
+        id: true, nome: true, email: true, papel: true, ativo: true, criadoEm: true, funcionarioId: true,
         departamentosGeridos: { select: { departamentoId: true } },
       },
       orderBy: { nome: "asc" },
@@ -176,6 +176,17 @@ rotasOrg.post(
   soAdmin,
   rota(async (req, res) => {
     const d = esquemaUsuario.parse(req.body);
+    // Promover um funcionário que já tem login: ele continua batendo ponto e ganha o acesso ao painel
+    const { funcionarioId } = z.object({ funcionarioId: z.string().optional() }).parse(req.body);
+    if (funcionarioId) {
+      const existente = await prisma.usuario.findFirst({ where: { funcionarioId, empresaId: eid(req) } });
+      if (!existente) throw new ErroHttp(400, "Este funcionário ainda não tem login no app. Crie o acesso dele em Funcionários primeiro.");
+      if (existente.papel !== "FUNCIONARIO") throw new ErroHttp(409, "Este funcionário já faz parte da equipe do RH");
+      await prisma.usuario.update({ where: { id: existente.id }, data: { papel: d.papel } });
+      esquecerUsuario(existente.id);
+      await definirDepartamentos(eid(req), existente.id, d.papel === "GESTOR" ? d.departamentoIds : []);
+      return res.status(201).json({ id: existente.id, promovido: true });
+    }
     const { email } = z.object({ email: z.string().email("E-mail inválido").toLowerCase() }).parse(req.body);
     if (await prisma.usuario.findUnique({ where: { email } })) throw new ErroHttp(409, "Este e-mail já é usado por outro login");
     const u = await prisma.usuario.create({
@@ -212,8 +223,28 @@ rotasOrg.put(
       where: { id: u.id },
       data: { nome: d.nome, papel: d.papel, ...(d.ativo !== undefined ? { ativo: d.ativo } : {}) },
     });
+    esquecerUsuario(u.id);
     await definirDepartamentos(eid(req), u.id, d.papel === "GESTOR" ? d.departamentoIds : []);
     res.json({ ok: true });
+  }),
+);
+
+// Tira a pessoa da equipe do RH: quem também é funcionário volta a ser só funcionário; os demais são desativados
+rotasOrg.delete(
+  "/usuarios/:id",
+  soAdmin,
+  rota(async (req, res) => {
+    const u = await prisma.usuario.findFirst({ where: { id: req.params.id, empresaId: eid(req), papel: { in: ["ADMIN", "GESTOR"] } } });
+    if (!u) throw naoEncontrado("Usuário");
+    if (u.id === sessao(req).usuarioId) throw new ErroHttp(400, "Você não pode se remover da equipe do RH");
+    if (u.papel === "ADMIN") {
+      const outros = await prisma.usuario.count({ where: { empresaId: eid(req), papel: "ADMIN", ativo: true, id: { not: u.id } } });
+      if (!outros) throw new ErroHttp(400, "A empresa precisa ter pelo menos um administrador ativo");
+    }
+    await prisma.gestorDepartamento.deleteMany({ where: { usuarioId: u.id } });
+    await prisma.usuario.update({ where: { id: u.id }, data: u.funcionarioId ? { papel: "FUNCIONARIO" } : { ativo: false } });
+    esquecerUsuario(u.id);
+    res.json({ ok: true, virouFuncionario: !!u.funcionarioId });
   }),
 );
 

@@ -48,6 +48,7 @@ const I = {
   telefone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
   email: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  painel: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
 };
 const icone = (nome) => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[nome]}</svg>`;
 const iconeBatida = (tipo) => (tipo.startsWith("Saída pausa") ? "pausa" : tipo.startsWith("Retorno") ? "retorno" : tipo.startsWith("Saída") ? "saida" : "entrada");
@@ -713,8 +714,9 @@ async function telaSuporte() {
 
 // ---------- Menu ----------
 async function telaMenu() {
-  const push = await estadoPush();
+  const [push, eu] = await Promise.all([estadoPush(), api("GET", "/api/auth/eu")]);
   tela.innerHTML = `<div class="cartao menu-lista">
+      ${eu.papel !== "FUNCIONARIO" ? `<a href="/admin">${icone("painel")}<strong>Painel do ${eu.papel === "ADMIN" ? "RH" : "gestor"}</strong></a>` : ""}
       <a href="#espelho">${icone("espelho")}Espelho de ponto</a>
       <a href="#historico">${icone("historico")}Histórico e justificativas</a>
       <a href="#pedidos">${icone("pedido")}Meus pedidos e atestados</a>

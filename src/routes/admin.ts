@@ -5,7 +5,7 @@ import path from "node:path";
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import { z } from "zod";
-import { autenticar, exigirPapel } from "../auth.js";
+import { autenticar, esquecerUsuario, exigirPapel } from "../auth.js";
 import { prisma } from "../db.js";
 import { ErroHttp, naoEncontrado } from "../lib/erros.js";
 import { limiteFuncionarios } from "../lib/planos.js";
@@ -150,6 +150,8 @@ rotasAdmin.put(
     const d = await validarReferencias(eid(req), esquemaFuncionario.parse(req.body));
     if (d.ativo && !atual.ativo) await verificarLimitePlano(eid(req));
     const f = await prisma.funcionario.update({ where: { id: atual.id }, data: dadosFuncionario(d) });
+    const login = await prisma.usuario.findUnique({ where: { funcionarioId: f.id }, select: { id: true } });
+    if (login) esquecerUsuario(login.id); // desativar o funcionário corta o acesso na hora
     const linkConvite = await salvarAcesso(eid(req), f, esquemaAcesso.parse(req.body.acesso));
     dispararWebhook(eid(req), "funcionario.alterado", f);
     res.json({ ...f, linkConvite });

@@ -44,7 +44,7 @@ Câmera e GPS no navegador só funcionam em `localhost` ou em HTTPS. Sem SMTP co
 **RH (`/admin`)**
 - Painel do dia, roteiro de primeiros passos e indicadores do mês (absenteísmo, horas extras, atrasos, banco de horas por departamento, quem está trabalhando agora, no mapa)
 - Funcionários, com importação por planilha CSV
-- Filiais, departamentos e gestores: cada gestor vê e aprova só a equipe dele
+- Filiais, departamentos e gestores: cada gestor vê e aprova só a equipe dele; um funcionário pode ser promovido a gestor e continua batendo ponto pelo app
 - Jornadas semanais e escalas em ciclo (12x36, 6x2…)
 - Regras da convenção coletiva: faixas de hora extra, percentual de domingo/feriado, hora noturna, banco de horas com validade
 - Feriados nacionais em um clique; feriados municipais por filial
@@ -56,7 +56,7 @@ Câmera e GPS no navegador só funcionam em `localhost` ou em HTTPS. Sem SMTP co
 - Logo da empresa e contatos de suporte mostrados no app
 - Exportação para a folha em CSV configurável (código de cada evento, separador, horas decimais ou HH:MM)
 - AFD, AEJ e AFD assinado (.p7s); chaves de API e webhooks para o ERP
-- Notificações: pedidos novos, contestações, funcionário que não bateu a entrada
+- Minhas notificações (cada gestor e administrador escolhe o que recebe e por onde: desligado, painel/celular ou também e-mail): batida da equipe (todas ou só fora do horário), entrada não registrada (15, 30 ou 60 min), dia encerrado com batida faltando (1, 2 ou 4 h depois), hora extra acima de 2h, pedidos, contestações, rosto recusado e resumo diário no horário escolhido
 - Conta: plano, funcionários ativos, prazo de guarda das fotos (LGPD)
 
 **Dono do SaaS (`/superadmin`)**: lista as empresas clientes, funcionários ativos, último ponto e receita estimada; muda o plano, estende o teste e bloqueia ou libera o acesso. Acesso para os e-mails em `SUPERADMIN_EMAILS`.

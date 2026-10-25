@@ -2,7 +2,8 @@
 // As chaves VAPID do Web Push são geradas na primeira vez e guardadas no banco (ConfigSistema).
 import webpush from "web-push";
 import { prisma } from "../db.js";
-import { urlApp } from "./email.js";
+import { lerPreferencias, type EventoEquipe, type Preferencias } from "../lib/preferencias.js";
+import { enviarEmail, urlApp } from "./email.js";
 
 let chaves: Promise<{ publica: string; privada: string }> | null = null;
 
@@ -85,4 +86,46 @@ export async function responsaveisPor(empresaId: string, departamentoId: string 
       ],
     },
   });
+}
+
+interface AlvoEquipe {
+  id: string | null; // funcionário do evento (null: pessoa não identificada no quiosque)
+  departamentoId: string | null;
+}
+
+/**
+ * Avisa quem acompanha o funcionário (administradores e gestores do departamento),
+ * respeitando as preferências de cada um: desligado, no app/celular, ou também por e-mail.
+ * `filtro` decide pela opção extra do evento (ex.: tolerância de atraso escolhida).
+ * Com `chave`, cada pessoa recebe o aviso uma vez só.
+ */
+export async function avisarEquipe(
+  empresaId: string,
+  alvo: AlvoEquipe,
+  evento: EventoEquipe,
+  titulo: string,
+  texto: string,
+  link: string,
+  opcoes: { chave?: string; filtro?: (p: Preferencias[EventoEquipe]) => boolean } = {},
+) {
+  const responsaveis = await responsaveisPor(empresaId, alvo.departamentoId);
+  let enviados = 0;
+  for (const r of responsaveis) {
+    if (alvo.id && r.funcionarioId === alvo.id) continue; // gestor que também bate ponto não recebe aviso de si mesmo
+    const pref = lerPreferencias(r.preferenciasNotificacao)[evento];
+    if (pref.canal === "OFF" || (opcoes.filtro && !opcoes.filtro(pref))) continue;
+    const novo = await notificar(empresaId, r.id, titulo, texto, link, opcoes.chave ? `${opcoes.chave}:${r.id}` : undefined);
+    if (!novo) continue;
+    enviados++;
+    if (pref.canal === "APP_EMAIL") {
+      enviarEmail({ para: r.email, assunto: titulo, titulo, paragrafos: [texto], botao: { texto: "Abrir o painel", url: urlApp() + link } })
+        .catch((e) => console.warn("Falha no e-mail de aviso:", (e as Error).message));
+    }
+  }
+  return enviados;
+}
+
+/** Versão "dispara e esquece", para não atrasar a resposta de quem gerou o evento. */
+export function avisarEquipeEmSegundoPlano(...args: Parameters<typeof avisarEquipe>) {
+  avisarEquipe(...args).catch((e) => console.error("Erro ao avisar a equipe:", e));
 }

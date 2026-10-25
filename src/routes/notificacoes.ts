@@ -1,9 +1,11 @@
 // Notificações do usuário logado (qualquer papel) e inscrição no Web Push.
 import { Router } from "express";
 import { z } from "zod";
-import { autenticar } from "../auth.js";
+import { autenticar, exigirPapel } from "../auth.js";
 import { prisma } from "../db.js";
-import { chavesPush } from "../services/notificacoes.js";
+import { esquemaPreferencias, lerPreferencias } from "../lib/preferencias.js";
+import { emailConfigurado, enviarEmail } from "../services/email.js";
+import { chavesPush, notificar } from "../services/notificacoes.js";
 import { rota, sessao } from "./util.js";
 
 export const rotasNotificacoes = Router();
@@ -44,6 +46,48 @@ rotasNotificacoes.post(
   autenticar,
   rota(async (req, res) => {
     await prisma.notificacao.updateMany({ where: { usuarioId: sessao(req).usuarioId, lidaEm: null }, data: { lidaEm: new Date() } });
+    res.json({ ok: true });
+  }),
+);
+
+// ---------- Preferências de quem acompanha equipes (ADMIN e GESTOR) ----------
+
+const soRh = exigirPapel("ADMIN", "GESTOR");
+
+rotasNotificacoes.get(
+  "/admin/minhas-notificacoes",
+  autenticar,
+  soRh,
+  rota(async (req, res) => {
+    const u = await prisma.usuario.findUniqueOrThrow({ where: { id: sessao(req).usuarioId } });
+    res.json({ preferencias: lerPreferencias(u.preferenciasNotificacao), email: u.email, emailConfigurado: emailConfigurado() });
+  }),
+);
+
+rotasNotificacoes.put(
+  "/admin/minhas-notificacoes",
+  autenticar,
+  soRh,
+  rota(async (req, res) => {
+    const p = esquemaPreferencias.parse(req.body);
+    await prisma.usuario.update({ where: { id: sessao(req).usuarioId }, data: { preferenciasNotificacao: JSON.stringify(p) } });
+    res.json(p);
+  }),
+);
+
+rotasNotificacoes.post(
+  "/admin/minhas-notificacoes/teste",
+  autenticar,
+  soRh,
+  rota(async (req, res) => {
+    const s = sessao(req);
+    const u = await prisma.usuario.findUniqueOrThrow({ where: { id: s.usuarioId } });
+    await notificar(s.empresaId, u.id, "Teste de notificação", "Se você está vendo isto, os avisos estão funcionando neste aparelho.", "/admin#notificacoes");
+    const { email } = z.object({ email: z.boolean().default(false) }).parse(req.body ?? {});
+    if (email) {
+      await enviarEmail({ para: u.email, assunto: "Teste de notificação do ponto", titulo: "Teste de notificação",
+        paragrafos: ["Os avisos por e-mail estão funcionando."] });
+    }
     res.json({ ok: true });
   }),
 );

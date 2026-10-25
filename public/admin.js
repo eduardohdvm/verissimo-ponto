@@ -12,6 +12,7 @@ import { telaImportar } from "./rh/importar.js";
 import { telaIndicadores } from "./rh/indicadores.js";
 import { telaIntegracoes } from "./rh/integracoes.js";
 import { telaJornadas } from "./rh/jornadas.js";
+import { telaMinhasNotificacoes } from "./rh/minhas-notificacoes.js";
 import { telaLocais } from "./rh/locais.js";
 import { telaOrganizacao } from "./rh/organizacao.js";
 import { telaInicio } from "./rh/inicio.js";
@@ -30,6 +31,7 @@ const TELAS = [
   ["espelho", "Espelho de ponto", telaEspelho, false],
   ["solicitacoes", "Solicitações", telaSolicitacoes, false],
   ["afastamentos", "Férias e afastamentos", telaAfastamentos, false],
+  ["notificacoes", "Minhas notificações", telaMinhasNotificacoes, false],
   ["fechamento", "Fechamento do mês", telaFechamentos, true],
   ["comunicados", "Comunicados", telaComunicados, true],
   ["documentos", "Documentos (contracheques)", telaDocumentos, true],
@@ -51,6 +53,7 @@ const menu = document.getElementById("menu");
 menu.innerHTML = `<div class="marca">${LOGO}<span>Ponto</span></div>
   ${TELAS.filter(([, titulo, , soAdmin]) => titulo && (!soAdmin || eu.papel === "ADMIN"))
     .map(([rota, titulo]) => `<a href="#${rota}">${titulo}</a>`).join("")}
+  ${eu.funcionarioId ? '<a href="/ponto">Meu ponto (app)</a>' : ""}
   ${eu.superadmin ? '<a href="/superadmin">Empresas clientes (SaaS)</a>' : ""}
   <div class="rodape"><div><strong>${esc(eu.nome)}</strong><br>${esc(eu.empresa.razaoSocial)}</div>
     <a href="#" id="sair" style="padding:6px 0">Sair</a></div>`;
