@@ -128,3 +128,38 @@ export function tabelaEspelho(e, acao) {
   </div>
   <p class="muted small">* marcação incluída por ajuste. A marcação original nunca é alterada.</p>`;
 }
+
+// ---------- Olho para mostrar/ocultar a senha ----------
+// Vale para todo <input type="password">, inclusive os que aparecem depois (janelas e formulários).
+
+const OLHO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const OLHO_RISCADO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+
+function colocarOlho(input) {
+  if (input.dataset.olho) return;
+  input.dataset.olho = "1";
+  const caixa = document.createElement("span");
+  caixa.className = "campo-senha";
+  input.replaceWith(caixa);
+  const botao = Object.assign(document.createElement("button"), { type: "button", className: "olho-senha", innerHTML: OLHO });
+  botao.setAttribute("aria-label", "Mostrar senha");
+  botao.onclick = () => {
+    const mostrar = input.type === "password";
+    input.type = mostrar ? "text" : "password";
+    botao.innerHTML = mostrar ? OLHO_RISCADO : OLHO;
+    botao.setAttribute("aria-label", mostrar ? "Ocultar senha" : "Mostrar senha");
+    input.focus();
+  };
+  caixa.append(input, botao);
+}
+
+function procurarSenhas(raiz = document) {
+  raiz.querySelectorAll?.('input[type="password"]:not([data-olho])').forEach(colocarOlho);
+}
+
+if (typeof document !== "undefined") {
+  procurarSenhas();
+  new MutationObserver((mudancas) => {
+    for (const m of mudancas) for (const n of m.addedNodes) if (n.nodeType === 1) procurarSenhas(n.matches?.('input[type="password"]') ? n.parentNode : n);
+  }).observe(document.documentElement, { childList: true, subtree: true });
+}

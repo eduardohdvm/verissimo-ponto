@@ -189,3 +189,12 @@ dialog::backdrop { background: rgb(10 15 25 / 45%); }
 .cor-azul { background: #1463d9; } .cor-roxo { background: #6d3df2; } .cor-laranja { background: #d9830f; }
 .cor-verde { background: #1f9d55; } .cor-vermelho { background: #d63a35; }
 .logo-previa img { max-height: 56px; max-width: 160px; border-radius: 8px; background: #fff; padding: 4px; }
+
+/* Olho para mostrar/ocultar a senha */
+.campo-senha { position: relative; display: block; margin-top: 4px; }
+label > .campo-senha > input { margin-top: 0; }
+.campo-senha > input { padding-right: 44px; }
+.olho-senha { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); width: 36px; height: 36px; padding: 0;
+  border: none; background: transparent; color: var(--muted); border-radius: 8px; }
+.olho-senha:hover { background: var(--surface-2); color: var(--text); }
+.olho-senha svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
