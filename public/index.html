@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sistema de Ponto</title>
+  <title>Verissimo Ponto</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <meta name="apple-mobile-web-app-title" content="Ponto">
+  <meta name="apple-mobile-web-app-title" content="Verissimo">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="icon" href="/icon.svg">
-  <meta name="theme-color" content="#1463d9">
+  <meta name="theme-color" content="#042c53">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -57,7 +57,7 @@
   <script type="module">
     import { api, token, LOGO } from "/app.js";
 
-    document.getElementById("marca").innerHTML = `${LOGO}<span>Sistema de Ponto</span>`;
+    document.getElementById("marca").innerHTML = `${LOGO}<span>Verissimo Ponto</span>`;
     const destino = (papel) => (location.href = papel === "FUNCIONARIO" ? "/ponto" : "/admin");
 
     if (token.get()) api("GET", "/api/auth/eu").then((u) => destino(u.papel)).catch(() => token.limpar());

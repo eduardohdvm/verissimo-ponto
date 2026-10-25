@@ -35,13 +35,14 @@ export async function enviarEmail(e: Email): Promise<void> {
     return;
   }
   const html = `<div style="font-family:Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#17202c">
+    <p style="margin:0 0 20px;font-size:15px;font-weight:700;letter-spacing:.06em;color:#042c53">VERISSIMO <span style="color:#ef9f27">PONTO</span></p>
     <h2 style="margin:0 0 16px;font-size:20px">${esc(e.titulo)}</h2>
     ${e.paragrafos.map((p) => `<p style="margin:0 0 12px;line-height:1.5">${esc(p)}</p>`).join("")}
-    ${e.botao ? `<p style="margin:24px 0"><a href="${esc(e.botao.url)}" style="background:#1463d9;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${esc(e.botao.texto)}</a></p>
+    ${e.botao ? `<p style="margin:24px 0"><a href="${esc(e.botao.url)}" style="background:#0c447c;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${esc(e.botao.texto)}</a></p>
     <p style="font-size:12px;color:#5e6b7c">Se o botão não funcionar, copie este endereço: ${esc(e.botao.url)}</p>` : ""}
   </div>`;
   await transporte.sendMail({
-    from: process.env.EMAIL_REMETENTE ?? process.env.SMTP_USER,
+    from: process.env.EMAIL_REMETENTE ?? `"Verissimo Ponto" <${process.env.SMTP_USER}>`,
     to: e.para,
     subject: e.assunto,
     text: texto,

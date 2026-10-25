@@ -1,6 +1,6 @@
 // Service worker: mantém a tela de ponto abrindo mesmo sem internet e recebe as notificações push.
 // As marcações feitas offline ficam guardadas no aparelho (ver ponto.js).
-const CACHE = "ponto-v5";
+const CACHE = "ponto-v6";
 const ARQUIVOS = [
   "/ponto", "/ponto.js", "/ponto.css", "/app.js", "/push.js", "/instalar.js", "/face-cliente.js", "/styles.css", "/icon.svg", "/icon-192.png", "/apple-touch-icon.png", "/manifest.webmanifest",
   "/quiosque", "/quiosque.js",

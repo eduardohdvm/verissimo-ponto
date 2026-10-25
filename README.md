@@ -1,4 +1,4 @@
-# Sistema de Ponto
+# Verissimo Ponto
 
 Ponto eletrônico SaaS multiempresa: o funcionário bate ponto no celular, no computador ou no tablet da empresa; o RH acompanha, ajusta, fecha o mês e exporta para a folha; o ERP recebe tudo por API.
 

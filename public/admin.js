@@ -50,7 +50,7 @@ if (eu.papel === "FUNCIONARIO") location.href = "/ponto";
 estado.eu = eu;
 
 const menu = document.getElementById("menu");
-menu.innerHTML = `<div class="marca">${LOGO}<span>Ponto</span></div>
+menu.innerHTML = `<div class="marca">${LOGO}<span>Verissimo Ponto</span></div>
   ${TELAS.filter(([, titulo, , soAdmin]) => titulo && (!soAdmin || eu.papel === "ADMIN"))
     .map(([rota, titulo]) => `<a href="#${rota}">${titulo}</a>`).join("")}
   ${eu.funcionarioId ? '<a href="/ponto">Meu ponto (app)</a>' : ""}

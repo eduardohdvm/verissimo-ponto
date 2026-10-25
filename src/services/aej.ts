@@ -12,7 +12,7 @@ import { diasEntre, isoComOffset, somarDias, utcDeLocal } from "../lib/tempo.js"
 import { gerarEspelho } from "./espelho.js";
 
 const DESENVOLVEDOR = {
-  nome: "Sistema de Ponto",
+  nome: "Verissimo Ponto",
   versao: "0.2.0",
   cnpj: process.env.FABRICANTE_CNPJ ?? "00000000000000",
   razao: process.env.FABRICANTE_NOME ?? "Desenvolvedor do sistema",

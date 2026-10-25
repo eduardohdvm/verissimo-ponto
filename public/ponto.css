@@ -1,14 +1,14 @@
 /* App do funcionário: topo escuro, cartões, barra inferior com botão de câmera. */
 .app-func {
-  --topo: #24485c;
-  --topo-2: #2f5b72;
+  --topo: #042c53;
+  --topo-2: #0c447c;
   --topo-texto: #ffffff;
   --cartao-sombra: 0 2px 10px rgb(16 40 60 / 10%);
   background: var(--bg);
   padding-bottom: calc(92px + env(safe-area-inset-bottom));
 }
 @media (prefers-color-scheme: dark) {
-  .app-func { --topo: #183140; --topo-2: #22404f; --cartao-sombra: none; }
+  .app-func { --topo: #0a2440; --topo-2: #12375e; --cartao-sombra: none; }
 }
 
 /* ---------- Topo ---------- */
@@ -19,7 +19,10 @@
   font-weight: 700; color: var(--topo); font-size: 18px; overflow: hidden; }
 .logo-empresa img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .marca-app { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .12em; font-size: 16px; }
-.marca-app-icone svg { width: 44px; height: 44px; display: block; }
+.marca-app-icone svg { width: 36px; height: 36px; display: block; }
+.marca-app-nome { display: flex; flex-direction: column; line-height: 1.05; }
+.marca-app-nome strong { font-size: 16px; letter-spacing: .14em; }
+.marca-app-nome small { font-size: 11px; letter-spacing: .42em; color: #ef9f27; font-weight: 700; }
 .icone-btn { position: relative; background: transparent; border: none; color: var(--topo-texto); padding: 6px; }
 .icone-btn:hover { background: rgb(255 255 255 / 10%); }
 .icone-btn svg, .barra-inferior svg, .atalho svg, .menu-lista svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }

@@ -56,7 +56,7 @@ const icone = (nome) => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[nome]}<
 const iconeBatida = (tipo) => (tipo.startsWith("Saída pausa") ? "pausa" : tipo.startsWith("Retorno") ? "retorno" : tipo.startsWith("Saída") ? "saida" : "entrada");
 const classeBatida = (tipo) => (tipo.startsWith("Saída pausa") || tipo.startsWith("Retorno") ? "pausa" : tipo.startsWith("Saída") ? "saida" : "entrada");
 
-$("marca-icone").innerHTML = `<svg viewBox="0 0 48 48" aria-hidden="true" fill="none" stroke="#fff" stroke-width="2.5"><circle cx="24" cy="24" r="21"/><path d="M24 13v11l7 4" stroke-linecap="round"/></svg>`;
+$("marca-icone").innerHTML = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 7.5l9 18 9-18" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="10.8" r="2.6" fill="#ef9f27"/></svg>`;
 
 // ---------- Navegação ----------
 const TELAS = {

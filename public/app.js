@@ -1,6 +1,6 @@
 // Funções compartilhadas entre as telas.
 
-export const LOGO = `<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--primary)"/><circle cx="16" cy="16" r="9" fill="none" stroke="var(--primary-text)" stroke-width="2.4"/><path d="M16 11v5.5l3.5 2" fill="none" stroke="var(--primary-text)" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+export const LOGO = `<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#042c53"/><path d="M8 8.6l8 16 8-16" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16" cy="11.4" r="2.3" fill="#ef9f27"/></svg>`;
 
 export const token = {
   get: () => localStorage.getItem("token"),
