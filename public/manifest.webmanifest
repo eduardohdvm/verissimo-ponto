@@ -1,9 +1,20 @@
 {
-  "name": "Sistema de Ponto",
+  "id": "/ponto",
+  "name": "Ponto",
   "short_name": "Ponto",
+  "description": "Bata o ponto, veja seu espelho, banco de horas e comunicados da empresa.",
+  "lang": "pt-BR",
   "start_url": "/ponto",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#f4f6f9",
-  "theme_color": "#1463d9",
-  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+  "theme_color": "#24485c",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
 }

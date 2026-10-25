@@ -34,6 +34,7 @@ Câmera e GPS no navegador só funcionam em `localhost` ou em HTTPS. Sem SMTP co
 - Assinatura eletrônica do espelho fechado (com a senha) ou contestação
 - Notificações no celular: lembrete de bater o ponto, resposta dos pedidos, espelho para assinar
 - Termo de uso dos dados (LGPD) aceito no primeiro acesso
+- Instala no iPhone e no Android sem loja: botão "Instalar" na Home e no Menu (Android instala com um toque; no iPhone mostra o passo a passo pelo Compartilhar → Adicionar à Tela de Início). Atualizações chegam sozinhas
 - Convite por e-mail ou WhatsApp para criar a senha; "esqueci minha senha"
 
 **Quiosque (`/quiosque`, tablet na entrada da empresa)**

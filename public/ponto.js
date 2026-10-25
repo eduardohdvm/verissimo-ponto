@@ -1,6 +1,7 @@
 // App do funcionário: Home, bater ponto, espelho, histórico com fotos, arquivos, suporte e menu.
 import { api, blobAutenticado, dataBr, DIAS, esc, hhmm, mesAtual, NOME_AFASTAMENTO, saldo, sair, tagsOcorrencias, tabelaEspelho, token } from "/app.js";
 import { carregarModelos, desafioLocal, executarDesafio } from "/face-cliente.js";
+import { estadoInstalacao, instalarApp, quandoMudar } from "/instalar.js";
 import { ativarPush, estadoPush } from "/push.js";
 
 if (!token.get()) location.href = "/";
@@ -48,6 +49,7 @@ const I = {
   telefone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
   email: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   relogio: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  instalar: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 7v7M9 11l3 3 3-3M10 18h4"/>',
   painel: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
 };
 const icone = (nome) => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[nome]}</svg>`;
@@ -111,6 +113,19 @@ async function carregarTopo() {
   if (i.funcionario.temFoto) blobAutenticado("/api/ponto/foto").then((u) => ($("avatar").innerHTML = `<img src="${u}" alt="">`), () => {});
 }
 
+const INSTALAR_DISPENSADO = "ponto-instalar-dispensado";
+quandoMudar(() => {
+  const nome = location.hash.slice(1) || "inicio";
+  if (nome === "inicio" || nome === "menu") navegar();
+});
+function ligarInstalar() {
+  $("btn-instalar")?.addEventListener("click", () => instalarApp(modal));
+  $("dispensar-instalar")?.addEventListener("click", () => {
+    try { localStorage.setItem(INSTALAR_DISPENSADO, "1"); } catch {}
+    document.querySelector(".convite-instalar")?.remove();
+  });
+}
+
 async function atualizarSino() {
   const r = await api("GET", "/api/notificacoes").catch(() => null);
   if (!r) return;
@@ -147,9 +162,20 @@ async function telaInicio() {
     `<a class="informativo inf-laranja" href="#pedidos"><span>Esqueceu de marcar? Teve atestado?</span><strong>Justificativas</strong></a>`,
   ];
 
+  // Convite para instalar o app (some depois de instalado ou se a pessoa dispensar)
+  let dispensado = false;
+  try { dispensado = localStorage.getItem(INSTALAR_DISPENSADO) === "1"; } catch {}
+  const podeInstalar = ["CONVITE", "IOS", "ANDROID"].includes(estadoInstalacao()) && !dispensado;
+
   const b = i.banco;
   const maxBarra = Math.max(60, ...i.semana.dias.map((d) => Math.max(d.previstoMin, d.trabalhadoMin)));
   tela.innerHTML = `
+    ${podeInstalar ? `<div class="cartao convite-instalar">
+      <div class="convite-icone"><img src="/icon-192.png" alt=""></div>
+      <div><strong>Instale o app no celular</strong><span>Abra o ponto com um toque, direto da tela inicial.</span></div>
+      <button class="primary" id="btn-instalar">Instalar</button>
+      <button class="convite-fechar" id="dispensar-instalar" aria-label="Agora não">×</button>
+    </div>` : ""}
     <div class="secao-titulo"><h2>Últimos registros</h2><a href="#historico">ver todos</a></div>
     <div class="ultimos">${ultimos}</div>
 
@@ -198,6 +224,7 @@ async function telaInicio() {
     }, () => {});
   }
   tela.querySelectorAll("[data-comunicado]").forEach((el) => (el.onclick = () => abrirComunicado(i.comunicados.find((c) => c.id === el.dataset.comunicado))));
+  ligarInstalar();
   relogioHome();
 
   // Comunicado importante ainda não lido abre sozinho
@@ -722,6 +749,7 @@ async function telaMenu() {
       <a href="#pedidos">${icone("pedido")}Meus pedidos e atestados</a>
       <a href="#arquivos">${icone("pasta")}Arquivos</a>
       <a href="#notificacoes">${icone("sino")}Notificações</a>
+      ${estadoInstalacao() !== "INSTALADO" && estadoInstalacao() !== "INDISPONIVEL" ? `<button id="m-instalar">${icone("instalar")}Instalar o app no celular</button>` : ""}
       ${push === "INATIVO" ? `<button id="m-push">${icone("sino")}Ativar avisos no celular</button>` : ""}
       <button id="m-senha">${icone("cadeado")}Trocar senha</button>
       <button id="m-termo">${icone("escudo")}Privacidade e uso dos dados</button>
@@ -729,6 +757,7 @@ async function telaMenu() {
     </div>
     <p class="muted small" style="text-align:center">${esc(inicio?.empresa?.nome ?? "")}</p>`;
   $("m-sair").onclick = sair;
+  $("m-instalar")?.addEventListener("click", () => instalarApp(modal));
   $("m-termo").onclick = async () => {
     const t = await api("GET", "/api/ponto/termo");
     modal.innerHTML = `<h2>Uso dos seus dados</h2>${t.paragrafos.map((p) => `<p class="small" style="margin:0 0 8px">${esc(p)}</p>`).join("")}
